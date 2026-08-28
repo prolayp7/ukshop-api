@@ -95,4 +95,19 @@ describe('Catalog & Tax', () => {
   it('rejects deleting a product that still has a variant (Restrict)', async () => {
     await expect(prisma.product.delete({ where: { id: productId } })).rejects.toThrow();
   });
+
+  it('supports soft-delete on Category via deletedAt', async () => {
+    const category = await prisma.category.create({
+      data: { title: 'Test Soft-Delete Category', slug: 'test-soft-delete-category' },
+    });
+    expect(category.deletedAt).toBeNull();
+
+    const updated = await prisma.category.update({
+      where: { id: category.id },
+      data: { deletedAt: new Date() },
+    });
+    expect(updated.deletedAt).not.toBeNull();
+
+    await prisma.category.delete({ where: { id: category.id } });
+  });
 });
