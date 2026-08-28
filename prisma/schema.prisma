@@ -39,3 +39,131 @@ model Media {
   @@index([ownerType, ownerId, collection])
   @@map("media")
 }
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum AddressType {
+  BILLING
+  SHIPPING
+  BOTH
+}
+
+enum AdminUserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum OtpChannel {
+  EMAIL
+  SMS
+}
+
+model User {
+  id               Int        @id @default(autoincrement())
+  uuid             String     @unique @default(uuid())
+  email            String     @unique
+  emailVerifiedAt  DateTime?  @map("email_verified_at")
+  phone            String?    @unique
+  mobileVerifiedAt DateTime?  @map("mobile_verified_at")
+  passwordHash     String     @map("password_hash")
+  firstName        String     @map("first_name")
+  lastName         String     @map("last_name")
+  status           UserStatus @default(ACTIVE)
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+  deletedAt        DateTime?  @map("deleted_at")
+
+  addresses Address[]
+
+  @@map("users")
+}
+
+model Address {
+  id          Int         @id @default(autoincrement())
+  uuid        String      @unique @default(uuid())
+  userId      Int         @map("user_id")
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label       String?
+  fullName    String      @map("full_name")
+  companyName String?     @map("company_name")
+  line1       String
+  line2       String?
+  city        String
+  county      String?
+  postcode    String
+  country     String      @default("GB")
+  phone       String?
+  addressType AddressType @default(BOTH) @map("address_type")
+  isDefault   Boolean     @default(false) @map("is_default")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@map("addresses")
+}
+
+model AdminUser {
+  id           Int             @id @default(autoincrement())
+  email        String          @unique
+  passwordHash String          @map("password_hash")
+  name         String
+  status       AdminUserStatus @default(ACTIVE)
+  roleId       Int             @map("role_id")
+  role         Role            @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  lastLoginAt  DateTime?       @map("last_login_at")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+  deletedAt    DateTime?       @map("deleted_at")
+
+  @@map("admin_users")
+}
+
+model Role {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  adminUsers  AdminUser[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          Int     @id @default(autoincrement())
+  key         String  @unique
+  description String?
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       Int        @map("role_id")
+  permissionId Int        @map("permission_id")
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model OtpVerification {
+  id         Int        @id @default(autoincrement())
+  identifier String
+  channel    OtpChannel
+  code       String
+  purpose    String
+  expiresAt  DateTime   @map("expires_at")
+  consumedAt DateTime?  @map("consumed_at")
+  createdAt  DateTime   @default(now()) @map("created_at")
+
+  @@index([identifier, purpose])
+  @@map("otp_verifications")
+}
