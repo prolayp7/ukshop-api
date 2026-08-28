@@ -628,6 +628,8 @@ model Order {
   statusHistory       OrderStatusHistory[]
   reviews             Review[]
   paymentTransactions PaymentTransaction[]
+  paymentRefunds      PaymentRefund[]
+  paymentDisputes     PaymentDispute[]
 
   @@index([userId])
   @@index([status])
@@ -769,6 +771,7 @@ model PaymentRefund {
   transactionId    Int                @map("transaction_id")
   transaction      PaymentTransaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
   orderId          Int                @map("order_id")
+  order            Order              @relation(fields: [orderId], references: [id], onDelete: Restrict)
   amount           Decimal            @db.Decimal(10, 2)
   providerRefundId String?            @map("provider_refund_id")
   status           RefundStatus       @default(PENDING)
@@ -785,6 +788,7 @@ model PaymentDispute {
   transactionId     Int                @map("transaction_id")
   transaction       PaymentTransaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
   orderId           Int                @map("order_id")
+  order             Order              @relation(fields: [orderId], references: [id], onDelete: Restrict)
   providerDisputeId String             @unique @map("provider_dispute_id")
   amount            Decimal            @db.Decimal(10, 2)
   status            DisputeStatus
@@ -799,12 +803,13 @@ model PaymentDispute {
 }
 
 model PaymentWebhookLog {
-  id          Int       @id @default(autoincrement())
-  provider    String
-  eventType   String    @map("event_type")
-  payload     Json
-  processedAt DateTime? @map("processed_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
+  id              Int       @id @default(autoincrement())
+  provider        String
+  eventType       String    @map("event_type")
+  providerEventId String?   @unique @map("provider_event_id")
+  payload         Json
+  processedAt     DateTime? @map("processed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
 
   @@map("payment_webhook_logs")
 }

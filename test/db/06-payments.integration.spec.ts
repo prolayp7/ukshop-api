@@ -77,4 +77,35 @@ describe('Payments', () => {
       }),
     ).rejects.toThrow();
   });
+
+  it('refund and dispute can be fetched with order relation', async () => {
+    const refund = await prisma.paymentRefund.findFirst({
+      where: { orderId },
+      include: { order: true },
+    });
+    expect(refund).toBeDefined();
+    expect(refund?.order).toBeDefined();
+    expect(refund?.order.id).toBe(orderId);
+
+    const dispute = await prisma.paymentDispute.findFirst({
+      where: { orderId },
+      include: { order: true },
+    });
+    expect(dispute).toBeDefined();
+    expect(dispute?.order).toBeDefined();
+    expect(dispute?.order.id).toBe(orderId);
+  });
+
+  it('webhook log providerEventId enforces idempotency (unique constraint)', async () => {
+    const eventId = 'evt_test_unique_12345';
+    await prisma.paymentWebhookLog.create({
+      data: { provider: 'test-provider', eventType: 'charge.refunded', payload: { id: 'ch_test' }, providerEventId: eventId },
+    });
+
+    await expect(
+      prisma.paymentWebhookLog.create({
+        data: { provider: 'test-provider', eventType: 'charge.refunded', payload: { id: 'ch_test' }, providerEventId: eventId },
+      }),
+    ).rejects.toThrow();
+  });
 });
