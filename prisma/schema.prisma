@@ -76,7 +76,10 @@ model User {
   updatedAt        DateTime   @updatedAt @map("updated_at")
   deletedAt        DateTime?  @map("deleted_at")
 
-  addresses Address[]
+  addresses       Address[]
+  carts           Cart[]
+  wishlists       Wishlist[]
+  browsingHistory BrowsingHistory[]
 
   @@map("users")
 }
@@ -311,6 +314,7 @@ model Product {
   secondaryCategories CategoryProduct[]
   faqs                ProductFaq[]
   collections         CollectionProduct[]
+  browsingHistory     BrowsingHistory[]
 
   @@index([categoryId])
   @@index([brandId])
@@ -350,7 +354,9 @@ model ProductVariant {
   createdAt         DateTime      @default(now()) @map("created_at")
   updatedAt         DateTime      @updatedAt @map("updated_at")
 
-  attributes ProductVariantAttribute[]
+  attributes    ProductVariantAttribute[]
+  cartItems     CartItem[]
+  wishlistItems WishlistItem[]
 
   @@index([productId])
   @@map("product_variants")
@@ -403,4 +409,73 @@ model CollectionProduct {
 
   @@id([collectionId, productId])
   @@map("collection_products")
+}
+
+model Cart {
+  id         Int      @id @default(autoincrement())
+  userId     Int?     @map("user_id")
+  user       User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  guestToken String?  @unique @map("guest_token")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  items CartItem[]
+
+  @@index([userId])
+  @@map("carts")
+}
+
+model CartItem {
+  id               Int            @id @default(autoincrement())
+  cartId           Int            @map("cart_id")
+  cart             Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productVariantId Int            @map("product_variant_id")
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+  quantity         Int
+  savedForLater    Boolean        @default(false) @map("saved_for_later")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  @@unique([cartId, productVariantId])
+  @@map("cart_items")
+}
+
+model Wishlist {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String   @default("My Wishlist")
+  slug      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items WishlistItem[]
+
+  @@map("wishlists")
+}
+
+model WishlistItem {
+  id               Int            @id @default(autoincrement())
+  wishlistId       Int            @map("wishlist_id")
+  wishlist         Wishlist       @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  productVariantId Int            @map("product_variant_id")
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+  createdAt        DateTime       @default(now()) @map("created_at")
+
+  @@unique([wishlistId, productVariantId])
+  @@map("wishlist_items")
+}
+
+model BrowsingHistory {
+  id        Int      @id @default(autoincrement())
+  userId    Int?     @map("user_id")
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId String?  @map("session_id")
+  productId Int      @map("product_id")
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  viewedAt  DateTime @default(now()) @map("viewed_at")
+
+  @@index([userId, viewedAt])
+  @@index([sessionId, viewedAt])
+  @@map("browsing_history")
 }
