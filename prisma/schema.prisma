@@ -6,3 +6,36 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+enum MediaOwnerType {
+  PRODUCT
+  PRODUCT_VARIANT
+  CATEGORY
+  BRAND
+  BLOG_POST
+  BLOG_CATEGORY
+  AUTHOR
+  PAGE
+  BANNER
+  TESTIMONIAL
+  HERO_SLIDE
+  USER
+  REVIEW
+  ORDER_ITEM_RETURN
+}
+
+model Media {
+  id         Int            @id @default(autoincrement())
+  uuid       String         @unique @default(uuid())
+  ownerType  MediaOwnerType @map("owner_type")
+  ownerId    Int            @map("owner_id")
+  collection String
+  url        String
+  altText    String?        @map("alt_text")
+  sortOrder  Int            @default(0) @map("sort_order")
+  metadata   Json?
+  createdAt  DateTime       @default(now()) @map("created_at")
+
+  @@index([ownerType, ownerId, collection])
+  @@map("media")
+}
