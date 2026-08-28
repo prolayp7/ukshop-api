@@ -76,10 +76,13 @@ model User {
   updatedAt        DateTime   @updatedAt @map("updated_at")
   deletedAt        DateTime?  @map("deleted_at")
 
-  addresses       Address[]
-  carts           Cart[]
-  wishlists       Wishlist[]
-  browsingHistory BrowsingHistory[]
+  addresses        Address[]
+  carts            Cart[]
+  wishlists        Wishlist[]
+  browsingHistory  BrowsingHistory[]
+  orders           Order[]
+  reviews          Review[]
+  orderItemReturns OrderItemReturn[]
 
   @@map("users")
 }
@@ -120,6 +123,8 @@ model AdminUser {
   createdAt    DateTime        @default(now()) @map("created_at")
   updatedAt    DateTime        @updatedAt @map("updated_at")
   deletedAt    DateTime?       @map("deleted_at")
+
+  orderStatusChanges OrderStatusHistory[]
 
   @@map("admin_users")
 }
@@ -315,6 +320,8 @@ model Product {
   faqs                ProductFaq[]
   collections         CollectionProduct[]
   browsingHistory     BrowsingHistory[]
+  orderItems          OrderItem[]
+  reviews             Review[]
 
   @@index([categoryId])
   @@index([brandId])
@@ -357,6 +364,7 @@ model ProductVariant {
   attributes    ProductVariantAttribute[]
   cartItems     CartItem[]
   wishlistItems WishlistItem[]
+  orderItems    OrderItem[]
 
   @@index([productId])
   @@map("product_variants")
@@ -478,4 +486,237 @@ model BrowsingHistory {
   @@index([userId, viewedAt])
   @@index([sessionId, viewedAt])
   @@map("browsing_history")
+}
+
+enum OrderStatus {
+  PENDING
+  AWAITING_PAYMENT
+  PROCESSING
+  PACKED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  FAILED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum OrderItemStatus {
+  PENDING
+  PROCESSING
+  PACKED
+  SHIPPED
+  DELIVERED
+  RETURNED
+  CANCELLED
+  REFUNDED
+}
+
+enum ReturnStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  RECEIVED
+  REFUNDED
+}
+
+enum PickupStatus {
+  PENDING
+  SCHEDULED
+  PICKED_UP
+}
+
+enum ShippingRateType {
+  FLAT
+  WEIGHT_BANDED
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model ShippingMethod {
+  id               Int              @id @default(autoincrement())
+  title            String
+  carrier          String
+  rateType         ShippingRateType @default(FLAT) @map("rate_type")
+  flatRate         Decimal?         @map("flat_rate") @db.Decimal(10, 2)
+  freeOverAmount   Decimal?         @map("free_over_amount") @db.Decimal(10, 2)
+  estimatedDaysMin Int?             @map("estimated_days_min")
+  estimatedDaysMax Int?             @map("estimated_days_max")
+  status           CatalogStatus    @default(ACTIVE)
+
+  rateBands ShippingRateBand[]
+  orders    Order[]
+
+  @@map("shipping_methods")
+}
+
+model ShippingRateBand {
+  id               Int            @id @default(autoincrement())
+  shippingMethodId Int            @map("shipping_method_id")
+  shippingMethod   ShippingMethod @relation(fields: [shippingMethodId], references: [id], onDelete: Cascade)
+  minWeightKg      Decimal        @map("min_weight_kg") @db.Decimal(6, 3)
+  maxWeightKg      Decimal        @map("max_weight_kg") @db.Decimal(6, 3)
+  rate             Decimal        @db.Decimal(10, 2)
+
+  @@map("shipping_rate_bands")
+}
+
+model Order {
+  id            Int           @id @default(autoincrement())
+  uuid          String        @unique @default(uuid())
+  orderNumber   String        @unique @map("order_number")
+  userId        Int?          @map("user_id")
+  user          User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  email         String
+  phone         String?
+  status        OrderStatus   @default(PENDING)
+  paymentStatus PaymentStatus @default(PENDING) @map("payment_status")
+
+  billingFullName    String  @map("billing_full_name")
+  billingCompanyName String? @map("billing_company_name")
+  billingLine1       String  @map("billing_line1")
+  billingLine2       String? @map("billing_line2")
+  billingCity        String  @map("billing_city")
+  billingCounty      String? @map("billing_county")
+  billingPostcode    String  @map("billing_postcode")
+  billingCountry     String  @default("GB") @map("billing_country")
+  billingPhone       String? @map("billing_phone")
+
+  shippingFullName    String  @map("shipping_full_name")
+  shippingCompanyName String? @map("shipping_company_name")
+  shippingLine1       String  @map("shipping_line1")
+  shippingLine2       String? @map("shipping_line2")
+  shippingCity        String  @map("shipping_city")
+  shippingCounty      String? @map("shipping_county")
+  shippingPostcode    String  @map("shipping_postcode")
+  shippingCountry     String  @default("GB") @map("shipping_country")
+  shippingPhone       String? @map("shipping_phone")
+
+  shippingMethodId Int?            @map("shipping_method_id")
+  shippingMethod   ShippingMethod? @relation(fields: [shippingMethodId], references: [id], onDelete: SetNull)
+
+  subtotal         Decimal @db.Decimal(10, 2)
+  discountTotal    Decimal @default(0) @map("discount_total") @db.Decimal(10, 2)
+  shippingCharge   Decimal @default(0) @map("shipping_charge") @db.Decimal(10, 2)
+  vatTotal         Decimal @default(0) @map("vat_total") @db.Decimal(10, 2)
+  giftCardDiscount Decimal @default(0) @map("gift_card_discount") @db.Decimal(10, 2)
+  total            Decimal @db.Decimal(10, 2)
+
+  couponCode   String? @map("coupon_code")
+  customerNote String? @map("customer_note")
+  adminNote    String? @map("admin_note")
+
+  trackingCarrier String? @map("tracking_carrier")
+  trackingNumber  String? @map("tracking_number")
+  trackingUrl     String? @map("tracking_url")
+
+  placedAt  DateTime @default(now()) @map("placed_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items         OrderItem[]
+  statusHistory OrderStatusHistory[]
+  reviews       Review[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id                   Int             @id @default(autoincrement())
+  orderId              Int             @map("order_id")
+  order                Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId            Int             @map("product_id")
+  product              Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productVariantId     Int             @map("product_variant_id")
+  productVariant       ProductVariant  @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+  titleSnapshot        String          @map("title_snapshot")
+  variantTitleSnapshot String          @map("variant_title_snapshot")
+  skuSnapshot          String?         @map("sku_snapshot")
+  quantity             Int
+  unitPrice            Decimal         @map("unit_price") @db.Decimal(10, 2)
+  discount             Decimal         @default(0) @db.Decimal(10, 2)
+  vatRatePercent       Decimal         @map("vat_rate_percent") @db.Decimal(5, 2)
+  vatAmount            Decimal         @map("vat_amount") @db.Decimal(10, 2)
+  subtotal             Decimal         @db.Decimal(10, 2)
+  status               OrderItemStatus @default(PENDING)
+  returnEligible       Boolean         @default(true) @map("return_eligible")
+  returnDeadline       DateTime?       @map("return_deadline") @db.Date
+  createdAt            DateTime        @default(now()) @map("created_at")
+  updatedAt            DateTime        @updatedAt @map("updated_at")
+
+  returns OrderItemReturn[]
+  review  Review?
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model OrderStatusHistory {
+  id               Int        @id @default(autoincrement())
+  orderId          Int        @map("order_id")
+  order            Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  fromStatus       String?    @map("from_status")
+  toStatus         String     @map("to_status")
+  note             String?
+  changedByAdminId Int?       @map("changed_by_admin_id")
+  changedByAdmin   AdminUser? @relation(fields: [changedByAdminId], references: [id], onDelete: SetNull)
+  createdAt        DateTime   @default(now()) @map("created_at")
+
+  @@index([orderId])
+  @@map("order_status_history")
+}
+
+model OrderItemReturn {
+  id           Int           @id @default(autoincrement())
+  orderItemId  Int           @map("order_item_id")
+  orderItem    OrderItem     @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  userId       Int           @map("user_id")
+  user         User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  reason       String
+  comment      String?
+  refundAmount Decimal?      @map("refund_amount") @db.Decimal(10, 2)
+  returnStatus ReturnStatus  @default(REQUESTED) @map("return_status")
+  pickupStatus PickupStatus? @map("pickup_status")
+  approvedAt   DateTime?     @map("approved_at")
+  receivedAt   DateTime?     @map("received_at")
+  refundedAt   DateTime?     @map("refunded_at")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  @@map("order_item_returns")
+}
+
+model Review {
+  id           Int          @id @default(autoincrement())
+  uuid         String       @unique @default(uuid())
+  productId    Int          @map("product_id")
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  orderItemId  Int?         @unique @map("order_item_id")
+  orderItem    OrderItem?   @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  orderId      Int?         @map("order_id")
+  order        Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  userId       Int?         @map("user_id")
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  reviewerName String?      @map("reviewer_name")
+  rating       Int
+  title        String?
+  comment      String?
+  status       ReviewStatus @default(PENDING)
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  @@index([productId, status])
+  @@map("reviews")
 }
