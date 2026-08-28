@@ -167,3 +167,239 @@ model OtpVerification {
   @@index([identifier, purpose])
   @@map("otp_verifications")
 }
+
+enum CatalogStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum AttributeInputType {
+  SELECT
+  COLOR_SWATCH
+  IMAGE_SWATCH
+  TEXT
+}
+
+model TaxRate {
+  id          Int           @id @default(autoincrement())
+  title       String        @unique
+  ratePercent Decimal       @map("rate_percent") @db.Decimal(5, 2)
+  isDefault   Boolean       @default(false) @map("is_default")
+  status      CatalogStatus @default(ACTIVE)
+
+  products Product[]
+
+  @@map("tax_rates")
+}
+
+model Category {
+  id              Int           @id @default(autoincrement())
+  parentId        Int?          @map("parent_id")
+  parent          Category?     @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children        Category[]    @relation("CategoryTree")
+  title           String
+  slug            String        @unique
+  description     String?
+  sortOrder       Int           @default(0) @map("sort_order")
+  isIndexable     Boolean       @default(true) @map("is_indexable")
+  metaTitle       String?       @map("meta_title")
+  metaDescription String?       @map("meta_description")
+  status          CatalogStatus @default(ACTIVE)
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  products          Product[]
+  secondaryProducts CategoryProduct[]
+
+  @@index([parentId])
+  @@map("categories")
+}
+
+model Brand {
+  id          Int           @id @default(autoincrement())
+  title       String
+  slug        String        @unique
+  description String?
+  status      CatalogStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  products Product[]
+
+  @@map("brands")
+}
+
+model ProductCondition {
+  id    Int    @id @default(autoincrement())
+  title String
+  slug  String @unique
+
+  products Product[]
+
+  @@map("product_conditions")
+}
+
+model ProductAttribute {
+  id           Int                @id @default(autoincrement())
+  title        String
+  slug         String             @unique
+  inputType    AttributeInputType @default(SELECT) @map("input_type")
+  isFilterable Boolean            @default(true) @map("is_filterable")
+  deletedAt    DateTime?          @map("deleted_at")
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+
+  values        ProductAttributeValue[]
+  variantValues ProductVariantAttribute[]
+
+  @@map("product_attributes")
+}
+
+model ProductAttributeValue {
+  id          Int              @id @default(autoincrement())
+  attributeId Int              @map("attribute_id")
+  attribute   ProductAttribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+  value       String
+  swatchValue String?          @map("swatch_value")
+  sortOrder   Int              @default(0) @map("sort_order")
+
+  variantValues ProductVariantAttribute[]
+
+  @@unique([attributeId, value])
+  @@map("product_attribute_values")
+}
+
+model Product {
+  id                 Int               @id @default(autoincrement())
+  uuid               String            @unique @default(uuid())
+  categoryId         Int               @map("category_id")
+  category           Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  brandId            Int?              @map("brand_id")
+  brand              Brand?            @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  productConditionId Int?              @map("product_condition_id")
+  productCondition   ProductCondition? @relation(fields: [productConditionId], references: [id], onDelete: SetNull)
+  taxRateId          Int?              @map("tax_rate_id")
+  taxRate            TaxRate?          @relation(fields: [taxRateId], references: [id], onDelete: SetNull)
+  title              String
+  slug               String            @unique
+  sku                String?           @unique
+  mpn                String?
+  shortDescription   String?           @map("short_description")
+  description        String?
+  specsSummary       Json?             @map("specs_summary")
+  warrantyMonths     Int?              @map("warranty_months")
+  isReturnable       Boolean           @default(true) @map("is_returnable")
+  returnableDays     Int               @default(30) @map("returnable_days")
+  status             ProductStatus     @default(DRAFT)
+  isFeatured         Boolean           @default(false) @map("is_featured")
+  isTopProduct       Boolean           @default(false) @map("is_top_product")
+  isIndexable        Boolean           @default(true) @map("is_indexable")
+  metaTitle          String?           @map("meta_title")
+  metaDescription    String?           @map("meta_description")
+  deletedAt          DateTime?         @map("deleted_at")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+
+  variants            ProductVariant[]
+  secondaryCategories CategoryProduct[]
+  faqs                ProductFaq[]
+  collections         CollectionProduct[]
+
+  @@index([categoryId])
+  @@index([brandId])
+  @@index([status])
+  @@map("products")
+}
+
+model CategoryProduct {
+  categoryId Int      @map("category_id")
+  productId  Int      @map("product_id")
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([categoryId, productId])
+  @@map("category_products")
+}
+
+model ProductVariant {
+  id                Int           @id @default(autoincrement())
+  uuid              String        @unique @default(uuid())
+  productId         Int           @map("product_id")
+  product           Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  title             String
+  slug              String        @unique
+  barcode           String?       @unique
+  price             Decimal       @db.Decimal(10, 2)
+  salePrice         Decimal?      @map("sale_price") @db.Decimal(10, 2)
+  stockQty          Int           @default(0) @map("stock_qty")
+  lowStockThreshold Int           @default(5) @map("low_stock_threshold")
+  weightKg          Decimal?      @map("weight_kg") @db.Decimal(6, 3)
+  lengthCm          Decimal?      @map("length_cm") @db.Decimal(6, 2)
+  widthCm           Decimal?      @map("width_cm") @db.Decimal(6, 2)
+  heightCm          Decimal?      @map("height_cm") @db.Decimal(6, 2)
+  isDefault         Boolean       @default(false) @map("is_default")
+  status            CatalogStatus @default(ACTIVE)
+  deletedAt         DateTime?     @map("deleted_at")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  attributes ProductVariantAttribute[]
+
+  @@index([productId])
+  @@map("product_variants")
+}
+
+model ProductVariantAttribute {
+  id               Int                   @id @default(autoincrement())
+  productVariantId Int                   @map("product_variant_id")
+  productVariant   ProductVariant        @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+  attributeId      Int                   @map("attribute_id")
+  attribute        ProductAttribute      @relation(fields: [attributeId], references: [id], onDelete: Restrict)
+  attributeValueId Int                   @map("attribute_value_id")
+  attributeValue   ProductAttributeValue @relation(fields: [attributeValueId], references: [id], onDelete: Restrict)
+
+  @@unique([productVariantId, attributeId])
+  @@map("product_variant_attributes")
+}
+
+model ProductFaq {
+  id        Int     @id @default(autoincrement())
+  productId Int     @map("product_id")
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  question  String
+  answer    String
+  sortOrder Int     @default(0) @map("sort_order")
+
+  @@map("product_faqs")
+}
+
+model Collection {
+  id          Int      @id @default(autoincrement())
+  title       String
+  slug        String   @unique
+  description String?
+  type        String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  products CollectionProduct[]
+
+  @@map("collections")
+}
+
+model CollectionProduct {
+  collectionId Int        @map("collection_id")
+  productId    Int        @map("product_id")
+  sortOrder    Int        @default(0) @map("sort_order")
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([collectionId, productId])
+  @@map("collection_products")
+}
