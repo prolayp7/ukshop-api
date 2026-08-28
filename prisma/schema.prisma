@@ -225,6 +225,10 @@ model Category {
 
   products          Product[]
   secondaryProducts CategoryProduct[]
+  menuItems         MenuItem[]
+  megaMenuLinks     MegaMenuLink[]
+  featuredSections  FeaturedSection[]
+  banners           Banner[]
 
   @@index([parentId])
   @@map("categories")
@@ -240,6 +244,7 @@ model Brand {
   updatedAt   DateTime      @updatedAt @map("updated_at")
 
   products Product[]
+  banners  Banner[]
 
   @@map("brands")
 }
@@ -315,13 +320,15 @@ model Product {
   createdAt          DateTime          @default(now()) @map("created_at")
   updatedAt          DateTime          @updatedAt @map("updated_at")
 
-  variants            ProductVariant[]
-  secondaryCategories CategoryProduct[]
-  faqs                ProductFaq[]
-  collections         CollectionProduct[]
-  browsingHistory     BrowsingHistory[]
-  orderItems          OrderItem[]
-  reviews             Review[]
+  variants               ProductVariant[]
+  secondaryCategories    CategoryProduct[]
+  faqs                   ProductFaq[]
+  collections            CollectionProduct[]
+  browsingHistory        BrowsingHistory[]
+  orderItems             OrderItem[]
+  reviews                Review[]
+  banners                Banner[]
+  featuredSectionEntries FeaturedSectionProduct[]
 
   @@index([categoryId])
   @@index([brandId])
@@ -630,6 +637,7 @@ model Order {
   paymentTransactions PaymentTransaction[]
   paymentRefunds      PaymentRefund[]
   paymentDisputes     PaymentDispute[]
+  couponLine          OrderCouponLine?
 
   @@index([userId])
   @@index([status])
@@ -812,4 +820,205 @@ model PaymentWebhookLog {
   createdAt       DateTime  @default(now()) @map("created_at")
 
   @@map("payment_webhook_logs")
+}
+
+enum DiscountType {
+  FIXED
+  PERCENT
+}
+
+enum BannerLinkType {
+  PRODUCT
+  CATEGORY
+  BRAND
+  CUSTOM_URL
+}
+
+enum FeaturedSectionType {
+  NEWLY_ADDED
+  FEATURED
+  BEST_SELLER
+  TOP_RATED
+  MANUAL
+}
+
+enum MenuLocation {
+  HEADER
+  FOOTER
+}
+
+model Coupon {
+  id                Int          @id @default(autoincrement())
+  code              String       @unique
+  description       String?
+  discountType      DiscountType @map("discount_type")
+  discountAmount    Decimal      @map("discount_amount") @db.Decimal(10, 2)
+  appliesToShipping Boolean      @default(false) @map("applies_to_shipping")
+  minOrderTotal     Decimal?     @map("min_order_total") @db.Decimal(10, 2)
+  maxDiscountValue  Decimal?     @map("max_discount_value") @db.Decimal(10, 2)
+  startsAt          DateTime?    @map("starts_at")
+  endsAt            DateTime?    @map("ends_at")
+  maxTotalUsage     Int?         @map("max_total_usage")
+  maxUsagePerUser   Int?         @map("max_usage_per_user")
+  usageCount        Int          @default(0) @map("usage_count")
+  deletedAt         DateTime?    @map("deleted_at")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  orderLines OrderCouponLine[]
+
+  @@map("coupons")
+}
+
+model OrderCouponLine {
+  id             Int      @id @default(autoincrement())
+  orderId        Int      @unique @map("order_id")
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  couponId       Int      @map("coupon_id")
+  coupon         Coupon   @relation(fields: [couponId], references: [id], onDelete: Restrict)
+  couponCode     String   @map("coupon_code")
+  discountAmount Decimal  @map("discount_amount") @db.Decimal(10, 2)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("order_coupon_lines")
+}
+
+model Banner {
+  id           Int            @id @default(autoincrement())
+  title        String
+  slug         String         @unique
+  linkType     BannerLinkType @map("link_type")
+  productId    Int?           @map("product_id")
+  product      Product?       @relation(fields: [productId], references: [id], onDelete: SetNull)
+  categoryId   Int?           @map("category_id")
+  category     Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  brandId      Int?           @map("brand_id")
+  brand        Brand?         @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  customUrl    String?        @map("custom_url")
+  position     String
+  displayOrder Int            @default(0) @map("display_order")
+  status       CatalogStatus  @default(ACTIVE)
+  startsAt     DateTime?      @map("starts_at")
+  endsAt       DateTime?      @map("ends_at")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  @@map("banners")
+}
+
+model FeaturedSection {
+  id          Int                 @id @default(autoincrement())
+  title       String
+  slug        String              @unique
+  sectionType FeaturedSectionType @map("section_type")
+  categoryId  Int?                @map("category_id")
+  category    Category?           @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  sortOrder   Int                 @default(0) @map("sort_order")
+  status      CatalogStatus       @default(ACTIVE)
+
+  manualProducts FeaturedSectionProduct[]
+
+  @@map("featured_sections")
+}
+
+model FeaturedSectionProduct {
+  featuredSectionId Int             @map("featured_section_id")
+  productId         Int             @map("product_id")
+  sortOrder         Int             @default(0) @map("sort_order")
+  featuredSection   FeaturedSection @relation(fields: [featuredSectionId], references: [id], onDelete: Cascade)
+  product           Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([featuredSectionId, productId])
+  @@map("featured_section_products")
+}
+
+model HeroSlide {
+  id         Int           @id @default(autoincrement())
+  headline   String
+  subheading String?
+  ctaLabel   String?       @map("cta_label")
+  ctaUrl     String?       @map("cta_url")
+  sortOrder  Int           @default(0) @map("sort_order")
+  status     CatalogStatus @default(ACTIVE)
+  startsAt   DateTime?     @map("starts_at")
+  endsAt     DateTime?     @map("ends_at")
+
+  @@map("hero_slides")
+}
+
+model HeroTrustBadge {
+  id        Int           @id @default(autoincrement())
+  label     String
+  icon      String?
+  sortOrder Int           @default(0) @map("sort_order")
+  status    CatalogStatus @default(ACTIVE)
+
+  @@map("hero_trust_badges")
+}
+
+model Menu {
+  id       Int           @id @default(autoincrement())
+  name     String
+  slug     String        @unique
+  location MenuLocation
+  status   CatalogStatus @default(ACTIVE)
+
+  items MenuItem[]
+
+  @@map("menus")
+}
+
+model MenuItem {
+  id         Int           @id @default(autoincrement())
+  menuId     Int           @map("menu_id")
+  menu       Menu          @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  parentId   Int?          @map("parent_id")
+  parent     MenuItem?     @relation("MenuItemTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children   MenuItem[]    @relation("MenuItemTree")
+  label      String
+  href       String?
+  categoryId Int?          @map("category_id")
+  category   Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  sortOrder  Int           @default(0) @map("sort_order")
+  status     CatalogStatus @default(ACTIVE)
+
+  megaMenuPanel MegaMenuPanel?
+
+  @@map("menu_items")
+}
+
+model MegaMenuPanel {
+  id         Int      @id @default(autoincrement())
+  menuItemId Int      @unique @map("menu_item_id")
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  sortOrder  Int      @default(0) @map("sort_order")
+
+  columns MegaMenuColumn[]
+
+  @@map("mega_menu_panels")
+}
+
+model MegaMenuColumn {
+  id        Int           @id @default(autoincrement())
+  panelId   Int           @map("panel_id")
+  panel     MegaMenuPanel @relation(fields: [panelId], references: [id], onDelete: Cascade)
+  title     String?
+  sortOrder Int           @default(0) @map("sort_order")
+
+  links MegaMenuLink[]
+
+  @@map("mega_menu_columns")
+}
+
+model MegaMenuLink {
+  id         Int            @id @default(autoincrement())
+  columnId   Int            @map("column_id")
+  column     MegaMenuColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  label      String
+  categoryId Int?           @map("category_id")
+  category   Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  href       String?
+  sortOrder  Int            @default(0) @map("sort_order")
+
+  @@map("mega_menu_links")
 }
