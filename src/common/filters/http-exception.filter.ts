@@ -17,28 +17,35 @@ const STATUS_CODE_MAP: Record<number, string> = {
   500: 'INTERNAL_ERROR',
 };
 
-@Catch(HttpException)
+@Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
-  catch(exception: HttpException, host: ArgumentsHost): void {
+  catch(exception: unknown, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
-    const status = exception.getStatus();
-    const body = exception.getResponse();
 
-    let code = STATUS_CODE_MAP[status] ?? 'ERROR';
-    let message = exception.message;
-    let details: unknown;
+    if (exception instanceof HttpException) {
+      const status = exception.getStatus();
+      const body = exception.getResponse();
 
-    if (typeof body === 'object' && body !== null) {
-      const record = body as Record<string, unknown>;
-      if (Array.isArray(record.message)) {
-        code = 'VALIDATION_ERROR';
-        message = 'Validation failed';
-        details = { errors: record.message };
-      } else if (typeof record.message === 'string') {
-        message = record.message;
+      let code = STATUS_CODE_MAP[status] ?? 'ERROR';
+      let message = exception.message;
+      let details: unknown;
+
+      if (typeof body === 'object' && body !== null) {
+        const record = body as Record<string, unknown>;
+        if (Array.isArray(record.message)) {
+          code = 'VALIDATION_ERROR';
+          message = 'Validation failed';
+          details = { errors: record.message };
+        } else if (typeof record.message === 'string') {
+          message = record.message;
+        }
       }
-    }
 
-    response.status(status).json({ error: { code, message, details } });
+      response.status(status).json({ error: { code, message, details } });
+    } else {
+      response.status(500).json({
+        error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
+      });
+    }
   }
 }
