@@ -12,6 +12,8 @@ import { TaxRatesModule } from './modules/admin/catalog/tax-rates/tax-rates.modu
 import { ProductAttributesModule } from './modules/admin/catalog/product-attributes/product-attributes.module';
 import { ProductsModule } from './modules/admin/catalog/products/products.module';
 import { SettingsModule } from './modules/admin/settings/settings.module';
+import { ShippingMethodsModule } from './modules/admin/shipping/shipping-methods.module';
+import { OrdersModule } from './modules/admin/orders/orders.module';
 
 @Module({
   imports: [
@@ -27,6 +29,8 @@ import { SettingsModule } from './modules/admin/settings/settings.module';
     ProductAttributesModule,
     ProductsModule,
     SettingsModule,
+    ShippingMethodsModule,
+    OrdersModule,
   ],
   controllers: [AppController],
 })
