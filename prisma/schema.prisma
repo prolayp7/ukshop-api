@@ -329,6 +329,7 @@ model Product {
   reviews                Review[]
   banners                Banner[]
   featuredSectionEntries FeaturedSectionProduct[]
+  trendingEntries        TrendingProduct[]
 
   @@index([categoryId])
   @@index([brandId])
@@ -1144,4 +1145,38 @@ model Enquiry {
   updatedAt DateTime      @updatedAt @map("updated_at")
 
   @@map("enquiries")
+}
+
+enum TrendingPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+model SearchLog {
+  id          Int      @id @default(autoincrement())
+  query       String
+  resultCount Int      @map("result_count")
+  entityTypes Json?    @map("entity_types")
+  userId      Int?     @map("user_id")
+  sessionId   String?  @map("session_id")
+  ipAddress   String?  @map("ip_address")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("search_logs")
+}
+
+model TrendingProduct {
+  id          Int            @id @default(autoincrement())
+  productId   Int            @map("product_id")
+  product     Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  period      TrendingPeriod
+  searchCount Int            @default(0) @map("search_count")
+  viewCount   Int            @default(0) @map("view_count")
+  saleCount   Int            @default(0) @map("sale_count")
+  score       Int            @default(0)
+  computedAt  DateTime       @map("computed_at")
+
+  @@index([productId, period, computedAt])
+  @@map("trending_products")
 }
