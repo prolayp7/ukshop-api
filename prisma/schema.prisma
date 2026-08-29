@@ -83,6 +83,7 @@ model User {
   orders           Order[]
   reviews          Review[]
   orderItemReturns OrderItemReturn[]
+  giftCards        GiftCard[]
 
   @@map("users")
 }
@@ -632,13 +633,14 @@ model Order {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  items               OrderItem[]
-  statusHistory       OrderStatusHistory[]
-  reviews             Review[]
-  paymentTransactions PaymentTransaction[]
-  paymentRefunds      PaymentRefund[]
-  paymentDisputes     PaymentDispute[]
-  couponLine          OrderCouponLine?
+  items                OrderItem[]
+  statusHistory        OrderStatusHistory[]
+  reviews              Review[]
+  paymentTransactions  PaymentTransaction[]
+  paymentRefunds       PaymentRefund[]
+  paymentDisputes      PaymentDispute[]
+  couponLine           OrderCouponLine?
+  giftCardTransactions GiftCardTransaction[]
 
   @@index([userId])
   @@index([status])
@@ -1205,4 +1207,51 @@ model Setting {
   value Json
 
   @@map("settings")
+}
+
+enum GiftCardStatus {
+  ACTIVE
+  REDEEMED
+  EXPIRED
+  DISABLED
+}
+
+enum GiftCardTxnType {
+  ISSUE
+  REDEEM
+  REFUND
+  ADJUSTMENT
+}
+
+model GiftCard {
+  id                Int            @id @default(autoincrement())
+  uuid              String         @unique @default(uuid())
+  code              String         @unique
+  initialBalance    Decimal        @map("initial_balance") @db.Decimal(10, 2)
+  currentBalance    Decimal        @map("current_balance") @db.Decimal(10, 2)
+  currency          String         @default("GBP")
+  purchasedByUserId Int?           @map("purchased_by_user_id")
+  purchasedByUser   User?          @relation(fields: [purchasedByUserId], references: [id], onDelete: SetNull)
+  issuedToEmail     String?        @map("issued_to_email")
+  status            GiftCardStatus @default(ACTIVE)
+  expiresAt         DateTime?      @map("expires_at")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+
+  transactions GiftCardTransaction[]
+
+  @@map("gift_cards")
+}
+
+model GiftCardTransaction {
+  id         Int             @id @default(autoincrement())
+  giftCardId Int             @map("gift_card_id")
+  giftCard   GiftCard        @relation(fields: [giftCardId], references: [id], onDelete: Restrict)
+  orderId    Int?            @map("order_id")
+  order      Order?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  amount     Decimal         @db.Decimal(10, 2)
+  type       GiftCardTxnType
+  createdAt  DateTime        @default(now()) @map("created_at")
+
+  @@map("gift_card_transactions")
 }
