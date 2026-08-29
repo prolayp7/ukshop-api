@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
@@ -17,6 +18,9 @@ async function main() {
     'content.manage',
     'settings.manage',
     'reports.view',
+    'customers.manage',
+    'media.manage',
+    'shipping.manage',
   ];
   for (const key of permissionKeys) {
     const permission = await prisma.permission.upsert({
@@ -28,6 +32,24 @@ async function main() {
       where: { roleId_permissionId: { roleId: superAdminRole.id, permissionId: permission.id } },
       update: {},
       create: { roleId: superAdminRole.id, permissionId: permission.id },
+    });
+  }
+
+  // Super Admin user
+  const seedAdminEmail = process.env.SEED_ADMIN_EMAIL ?? 'superadmin@ukshop.test';
+  const seedAdminPassword = process.env.SEED_ADMIN_PASSWORD ?? 'ChangeMe123!';
+  const existingSuperAdmin = await prisma.adminUser.findFirst({
+    where: { email: seedAdminEmail, deletedAt: null },
+  });
+  if (!existingSuperAdmin) {
+    const passwordHash = await bcrypt.hash(seedAdminPassword, 10);
+    await prisma.adminUser.create({
+      data: {
+        email: seedAdminEmail,
+        passwordHash,
+        name: 'Super Admin',
+        roleId: superAdminRole.id,
+      },
     });
   }
 
