@@ -1180,3 +1180,29 @@ model TrendingProduct {
   @@index([productId, period, computedAt])
   @@map("trending_products")
 }
+
+// userId/adminUserId/orderId/sessionId below are deliberately plain columns,
+// not Prisma relations: these are high-write, low-criticality log tables
+// where a stale reference (user later deleted) shouldn't block inserts or
+// require cascade bookkeeping — same trade-off as PaymentWebhookLog.
+model Notification {
+  id          String   @id @default(uuid())
+  userId      Int?     @map("user_id")
+  adminUserId Int?     @map("admin_user_id")
+  orderId     Int?     @map("order_id")
+  type        String
+  title       String
+  message     String
+  isRead      Boolean  @default(false) @map("is_read")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("notifications")
+}
+
+model Setting {
+  key   String @id
+  value Json
+
+  @@map("settings")
+}
