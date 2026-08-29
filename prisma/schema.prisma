@@ -8,6 +8,7 @@ datasource db {
 }
 
 enum MediaOwnerType {
+  LIBRARY
   PRODUCT
   PRODUCT_VARIANT
   CATEGORY
