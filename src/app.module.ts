@@ -2,9 +2,16 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { PrismaModule } from './prisma/prisma.module';
+import { AdminCoreModule } from './common/admin/admin-core.module';
+import { AdminAuthModule } from './modules/admin/auth/admin-auth.module';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), PrismaModule],
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    PrismaModule,
+    AdminCoreModule,
+    AdminAuthModule,
+  ],
   controllers: [AppController],
 })
 export class AppModule {}
