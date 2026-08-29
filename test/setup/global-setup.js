@@ -7,4 +7,9 @@ module.exports = async () => {
     env: process.env,
     stdio: 'inherit',
   });
+
+  execSync('npx ts-node prisma/seed.ts', {
+    env: process.env,
+    stdio: 'inherit',
+  });
 };
