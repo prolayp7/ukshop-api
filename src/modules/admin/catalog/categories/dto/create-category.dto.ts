@@ -1,4 +1,6 @@
 import { IsBoolean, IsInt, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { CatalogStatus } from '@prisma/client';
+import { IsEnum } from 'class-validator';
 
 export class CreateCategoryDto {
   @IsOptional()
@@ -35,4 +37,8 @@ export class CreateCategoryDto {
   @IsOptional()
   @IsString()
   metaDescription?: string;
+
+  @IsOptional()
+  @IsEnum(CatalogStatus)
+  status?: CatalogStatus;
 }

@@ -1,0 +1,4 @@
+import { MediaOwnerType } from '@prisma/client'; import { Type } from 'class-transformer'; import { IsEnum, IsInt, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
+export class ListMediaQueryDto { @IsEnum(MediaOwnerType) ownerType: MediaOwnerType; @Type(() => Number) @IsInt() ownerId: number; @IsOptional() @IsString() collection?: string; }
+export class UploadMediaDto { @IsEnum(MediaOwnerType) ownerType: MediaOwnerType; @Type(() => Number) @IsInt() ownerId: number; @IsString() @MinLength(1) @MaxLength(100) collection: string; @IsOptional() @IsString() altText?: string; @IsOptional() @Type(() => Number) @IsInt() @Min(0) sortOrder?: number; }
+export class UpdateMediaDto { @IsOptional() @IsString() altText?: string; @IsOptional() @IsInt() @Min(0) sortOrder?: number; }

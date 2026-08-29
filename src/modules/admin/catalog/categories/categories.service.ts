@@ -17,8 +17,8 @@ export class CategoriesService {
     }
   }
 
-  async list(page: number, perPage: number, parentId?: number) {
-    const where = { deletedAt: null, ...(parentId !== undefined ? { parentId } : {}) };
+  async list(page: number, perPage: number, parentId?: number, includeDeleted = false) {
+    const where = { ...(includeDeleted ? {} : { deletedAt: null }), ...(parentId !== undefined ? { parentId } : {}) };
     const [items, total] = await Promise.all([
       this.prisma.category.findMany({
         where,

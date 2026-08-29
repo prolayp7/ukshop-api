@@ -25,6 +25,7 @@ import { MenusModule } from './modules/admin/menus/menus.module';
 import { CmsModule } from './modules/admin/cms/cms.module';
 import { NotificationsModule } from './modules/admin/notifications/notifications.module';
 import { ReportsModule } from './modules/admin/reports/reports.module';
+import { MediaModule } from './modules/admin/media/media.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { ReportsModule } from './modules/admin/reports/reports.module';
     CmsModule,
     NotificationsModule,
     ReportsModule,
+    MediaModule,
   ],
   controllers: [AppController],
 })

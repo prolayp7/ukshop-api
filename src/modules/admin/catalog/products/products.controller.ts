@@ -9,8 +9,11 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { AdminAuthGuard } from '../../../../common/admin/admin-auth.guard';
 import { PermissionsGuard } from '../../../../common/admin/permissions.guard';
 import { RequirePermissions } from '../../../../common/admin/permissions.decorator';
@@ -22,12 +25,16 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
 import { UpdateStockDto } from './dto/update-stock.dto';
 import { ProductsService } from './products.service';
+import { ProductsImportService, UploadedImportFile } from './products-import.service';
 
 @Controller('admin/products')
 @UseGuards(AdminAuthGuard, PermissionsGuard)
 @RequirePermissions('products.manage')
 export class ProductsController {
-  constructor(private readonly service: ProductsService) {}
+  constructor(
+    private readonly service: ProductsService,
+    private readonly importService: ProductsImportService,
+  ) {}
 
   @Get()
   list(@Query() query: ListProductsQueryDto) {
@@ -38,6 +45,13 @@ export class ProductsController {
   @HttpCode(201)
   create(@Body() dto: CreateProductDto) {
     return this.service.create(dto);
+  }
+
+  @Post('import')
+  @HttpCode(200)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024, files: 1 } }))
+  import(@UploadedFile() file?: UploadedImportFile) {
+    return this.importService.import(file);
   }
 
   @Get(':id')
