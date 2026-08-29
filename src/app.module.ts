@@ -20,6 +20,11 @@ import { CouponsModule } from './modules/admin/marketing/coupons/coupons.module'
 import { PaymentOperationsModule } from './modules/admin/payment-operations/payment-operations.module';
 import { ReviewsModule } from './modules/admin/reviews/reviews.module';
 import { GiftCardsModule } from './modules/admin/gift-cards/gift-cards.module';
+import { MerchandisingModule } from './modules/admin/merchandising/merchandising.module';
+import { MenusModule } from './modules/admin/menus/menus.module';
+import { CmsModule } from './modules/admin/cms/cms.module';
+import { NotificationsModule } from './modules/admin/notifications/notifications.module';
+import { ReportsModule } from './modules/admin/reports/reports.module';
 
 @Module({
   imports: [
@@ -43,6 +48,11 @@ import { GiftCardsModule } from './modules/admin/gift-cards/gift-cards.module';
     PaymentOperationsModule,
     ReviewsModule,
     GiftCardsModule,
+    MerchandisingModule,
+    MenusModule,
+    CmsModule,
+    NotificationsModule,
+    ReportsModule,
   ],
   controllers: [AppController],
 })

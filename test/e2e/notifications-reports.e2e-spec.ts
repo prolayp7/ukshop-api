@@ -1,0 +1,9 @@
+import { INestApplication } from '@nestjs/common'; import * as request from 'supertest'; import { PrismaService } from '../../src/prisma/prisma.service'; import { loginAsSuperAdmin } from './helpers/admin-auth'; import { createTestApp } from './setup';
+describe('Admin Notifications and Reports (e2e)', () => {
+  let app: INestApplication; let prisma: PrismaService; let token: string; let notificationId: string;
+  beforeAll(async () => { ({ app, prisma } = await createTestApp()); token = await loginAsSuperAdmin(app); });
+  afterAll(async () => { if (notificationId) await prisma.notification.delete({ where: { id: notificationId } }).catch(() => undefined); await app.close(); });
+  it('creates a broadcast notification', async () => { const response = await request(app.getHttpServer()).post('/api/v1/admin/notifications').set('Authorization', `Bearer ${token}`).send({ type: 'ANNOUNCEMENT', title: 'Test notice', message: 'Scheduled maintenance', metadata: { test: true } }).expect(201); notificationId = response.body.data.id; expect(response.body.data.userId).toBeNull(); expect(response.body.data.adminUserId).toBeTruthy(); });
+  it('returns all report shapes for a valid range', async () => { const range = 'dateFrom=2026-01-01T00:00:00.000Z&dateTo=2026-12-31T23:59:59.999Z'; const sales = await request(app.getHttpServer()).get(`/api/v1/admin/reports/sales?${range}&groupBy=month`).set('Authorization', `Bearer ${token}`).expect(200); expect(sales.body.data).toHaveProperty('points'); const orders = await request(app.getHttpServer()).get(`/api/v1/admin/reports/orders?${range}`).set('Authorization', `Bearer ${token}`).expect(200); expect(orders.body.data).toHaveProperty('byStatus'); });
+  it('rejects an inverted report range', async () => { await request(app.getHttpServer()).get('/api/v1/admin/reports/sales?dateFrom=2026-12-31T00:00:00.000Z&dateTo=2026-01-01T00:00:00.000Z&groupBy=day').set('Authorization', `Bearer ${token}`).expect(400); });
+});
