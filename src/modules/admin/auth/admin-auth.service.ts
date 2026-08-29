@@ -86,6 +86,14 @@ export class AdminAuthService {
       data: { revokedAt: new Date() },
     });
 
+    const adminUser = await this.prisma.adminUser.findFirst({
+      where: { id: stored.adminUserId, deletedAt: null, status: 'ACTIVE' },
+    });
+
+    if (!adminUser) {
+      throw new UnauthorizedException('Admin user not found or disabled');
+    }
+
     return this.issueTokenPair(stored.adminUserId);
   }
 

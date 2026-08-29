@@ -1,12 +1,14 @@
 import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
 import { createTestApp } from './setup';
+import { PrismaService } from '../../src/prisma/prisma.service';
 
 describe('Admin Auth (e2e)', () => {
   let app: INestApplication;
+  let prisma: PrismaService;
 
   beforeAll(async () => {
-    ({ app } = await createTestApp());
+    ({ app, prisma } = await createTestApp());
   });
 
   afterAll(async () => {
@@ -62,5 +64,32 @@ describe('Admin Auth (e2e)', () => {
 
   it('rejects /me without a token', async () => {
     await request(app.getHttpServer()).get('/api/v1/admin/me').expect(401);
+  });
+
+  it('rejects refresh for a disabled admin, without leaving the refresh token usable', async () => {
+    const loginRes = await request(app.getHttpServer())
+      .post('/api/v1/admin/auth/login')
+      .send({ email, password })
+      .expect(200);
+
+    const { refreshToken } = loginRes.body.data;
+
+    const adminUser = await prisma.adminUser.findFirst({ where: { email } });
+    await prisma.adminUser.update({
+      where: { id: adminUser!.id },
+      data: { status: 'DISABLED' },
+    });
+
+    try {
+      await request(app.getHttpServer())
+        .post('/api/v1/admin/auth/refresh')
+        .send({ refreshToken })
+        .expect(401);
+    } finally {
+      await prisma.adminUser.update({
+        where: { id: adminUser!.id },
+        data: { status: 'ACTIVE' },
+      });
+    }
   });
 });
