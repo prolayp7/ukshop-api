@@ -10,6 +10,8 @@ import { BrandsModule } from './modules/admin/catalog/brands/brands.module';
 import { ProductConditionsModule } from './modules/admin/catalog/product-conditions/product-conditions.module';
 import { TaxRatesModule } from './modules/admin/catalog/tax-rates/tax-rates.module';
 import { ProductAttributesModule } from './modules/admin/catalog/product-attributes/product-attributes.module';
+import { ProductsModule } from './modules/admin/catalog/products/products.module';
+import { SettingsModule } from './modules/admin/settings/settings.module';
 
 @Module({
   imports: [
@@ -23,6 +25,8 @@ import { ProductAttributesModule } from './modules/admin/catalog/product-attribu
     ProductConditionsModule,
     TaxRatesModule,
     ProductAttributesModule,
+    ProductsModule,
+    SettingsModule,
   ],
   controllers: [AppController],
 })

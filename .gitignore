@@ -3,6 +3,7 @@
 /node_modules
 /build
 /tmp
+/docs
 
 # Logs
 logs
@@ -29,8 +30,8 @@ lerna-debug.log*
 .claude
 .codex
 .agents
-/docs
 /.superpowers
+.remember
 
 
 # md files

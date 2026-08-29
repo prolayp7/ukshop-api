@@ -1,0 +1,283 @@
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../../../../prisma/prisma.service';
+import { buildPaginationMeta, paginationSkipTake } from '../../../../common/pagination';
+import { CreateProductDto } from './dto/create-product.dto';
+import { CreateProductFaqDto } from './dto/create-product-faq.dto';
+import { CreateProductVariantDto } from './dto/create-product-variant.dto';
+import { ListProductsQueryDto } from './dto/list-products-query.dto';
+import { UpdateProductDto } from './dto/update-product.dto';
+import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
+import { UpdateStockDto } from './dto/update-stock.dto';
+
+const productDetailInclude = {
+  category: true,
+  brand: true,
+  productCondition: true,
+  taxRate: true,
+  secondaryCategories: { include: { category: true } },
+  faqs: { orderBy: { sortOrder: 'asc' as const } },
+  variants: {
+    where: { deletedAt: null },
+    include: {
+      attributes: { include: { attribute: true, attributeValue: true } },
+    },
+    orderBy: [{ isDefault: 'desc' as const }, { id: 'asc' as const }],
+  },
+};
+
+@Injectable()
+export class ProductsService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async list(query: ListProductsQueryDto) {
+    const page = query.page!;
+    const perPage = query.perPage!;
+    const where: Prisma.ProductWhereInput = {
+      ...(query.includeDeleted ? {} : { deletedAt: null }),
+      ...(query.categoryId
+        ? {
+            OR: [
+              { categoryId: query.categoryId },
+              { secondaryCategories: { some: { categoryId: query.categoryId } } },
+            ],
+          }
+        : {}),
+      ...(query.brandId ? { brandId: query.brandId } : {}),
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.q
+        ? {
+            AND: [
+              {
+                OR: [
+                  { title: { contains: query.q, mode: 'insensitive' } },
+                  { slug: { contains: query.q, mode: 'insensitive' } },
+                  { sku: { contains: query.q, mode: 'insensitive' } },
+                  { mpn: { contains: query.q, mode: 'insensitive' } },
+                ],
+              },
+            ],
+          }
+        : {}),
+    };
+    const [items, total] = await Promise.all([
+      this.prisma.product.findMany({
+        where,
+        ...paginationSkipTake(page, perPage),
+        include: { category: true, brand: true, _count: { select: { variants: true } } },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.product.count({ where }),
+    ]);
+    return { items, meta: buildPaginationMeta(page, perPage, total) };
+  }
+
+  async detail(id: number) {
+    const product = await this.prisma.product.findFirst({
+      where: { id, deletedAt: null },
+      include: productDetailInclude,
+    });
+    if (!product) throw new NotFoundException('Product not found');
+    return product;
+  }
+
+  private async assertSlugAvailable(slug: string, excludeId?: number) {
+    const existing = await this.prisma.product.findFirst({
+      where: { slug, deletedAt: null, ...(excludeId ? { id: { not: excludeId } } : {}) },
+      select: { id: true },
+    });
+    if (existing) throw new ConflictException(`Product slug "${slug}" is already in use`);
+  }
+
+  private productData(dto: CreateProductDto | UpdateProductDto) {
+    const { secondaryCategoryIds: _secondaryCategoryIds, specsSummary, ...fields } = dto;
+    return {
+      ...fields,
+      ...(specsSummary !== undefined
+        ? { specsSummary: specsSummary as Prisma.InputJsonValue }
+        : {}),
+    };
+  }
+
+  async create(dto: CreateProductDto) {
+    await this.assertSlugAvailable(dto.slug);
+    return this.prisma.$transaction(async (tx) => {
+      const product = await tx.product.create({
+        data: this.productData(dto) as Prisma.ProductUncheckedCreateInput,
+      });
+      if (dto.secondaryCategoryIds?.length) {
+        await tx.categoryProduct.createMany({
+          data: dto.secondaryCategoryIds.map((categoryId) => ({ productId: product.id, categoryId })),
+        });
+      }
+      return tx.product.findUniqueOrThrow({ where: { id: product.id }, include: productDetailInclude });
+    }).catch((error: unknown) => this.mapRelationError(error));
+  }
+
+  async update(id: number, dto: UpdateProductDto) {
+    await this.detail(id);
+    if (dto.slug) await this.assertSlugAvailable(dto.slug, id);
+    return this.prisma.$transaction(async (tx) => {
+      await tx.product.update({
+        where: { id },
+        data: this.productData(dto) as Prisma.ProductUncheckedUpdateInput,
+      });
+      if (dto.secondaryCategoryIds !== undefined) {
+        await tx.categoryProduct.deleteMany({ where: { productId: id } });
+        if (dto.secondaryCategoryIds.length) {
+          await tx.categoryProduct.createMany({
+            data: dto.secondaryCategoryIds.map((categoryId) => ({ productId: id, categoryId })),
+          });
+        }
+      }
+      return tx.product.findUniqueOrThrow({ where: { id }, include: productDetailInclude });
+    }).catch((error: unknown) => this.mapRelationError(error));
+  }
+
+  async remove(id: number) {
+    await this.detail(id);
+    await this.prisma.$transaction([
+      this.prisma.product.update({ where: { id }, data: { deletedAt: new Date() } }),
+      this.prisma.productVariant.updateMany({
+        where: { productId: id, deletedAt: null },
+        data: { deletedAt: new Date() },
+      }),
+    ]);
+  }
+
+  async addFaq(productId: number, dto: CreateProductFaqDto) {
+    await this.detail(productId);
+    return this.prisma.productFaq.create({ data: { ...dto, productId } });
+  }
+
+  async removeFaq(productId: number, faqId: number) {
+    await this.detail(productId);
+    const result = await this.prisma.productFaq.deleteMany({ where: { id: faqId, productId } });
+    if (!result.count) throw new NotFoundException('Product FAQ not found');
+  }
+
+  async listVariants(productId: number) {
+    await this.detail(productId);
+    return this.prisma.productVariant.findMany({
+      where: { productId, deletedAt: null },
+      include: { attributes: { include: { attribute: true, attributeValue: true } } },
+      orderBy: [{ isDefault: 'desc' }, { id: 'asc' }],
+    });
+  }
+
+  private async variantAttributeRows(
+    tx: Prisma.TransactionClient,
+    attributeValueIds: number[],
+  ) {
+    const values = await tx.productAttributeValue.findMany({
+      where: { id: { in: attributeValueIds }, attribute: { deletedAt: null } },
+      select: { id: true, attributeId: true },
+    });
+    if (values.length !== attributeValueIds.length) {
+      throw new BadRequestException('One or more attribute values are invalid');
+    }
+    if (new Set(values.map((value) => value.attributeId)).size !== values.length) {
+      throw new BadRequestException('A variant cannot contain multiple values for one attribute');
+    }
+    return values.map((value) => ({
+      attributeId: value.attributeId,
+      attributeValueId: value.id,
+    }));
+  }
+
+  async createVariant(productId: number, dto: CreateProductVariantDto) {
+    await this.detail(productId);
+    const { attributeValueIds, ...data } = dto;
+    return this.prisma.$transaction(async (tx) => {
+      const duplicate = await tx.productVariant.findFirst({
+        where: { productId, slug: dto.slug, deletedAt: null },
+      });
+      if (duplicate) throw new ConflictException(`Variant slug "${dto.slug}" is already in use`);
+      const attributes = await this.variantAttributeRows(tx, attributeValueIds);
+      if (dto.isDefault) {
+        await tx.productVariant.updateMany({ where: { productId }, data: { isDefault: false } });
+      }
+      return tx.productVariant.create({
+        data: {
+          ...data,
+          productId,
+          attributes: { create: attributes },
+        },
+        include: { attributes: { include: { attribute: true, attributeValue: true } } },
+      });
+    });
+  }
+
+  private async variant(productId: number, variantId: number) {
+    const variant = await this.prisma.productVariant.findFirst({
+      where: { id: variantId, productId, deletedAt: null, product: { deletedAt: null } },
+    });
+    if (!variant) throw new NotFoundException('Product variant not found');
+    return variant;
+  }
+
+  async updateVariant(productId: number, variantId: number, dto: UpdateProductVariantDto) {
+    await this.variant(productId, variantId);
+    const { attributeValueIds, ...data } = dto;
+    return this.prisma.$transaction(async (tx) => {
+      if (dto.slug) {
+        const duplicate = await tx.productVariant.findFirst({
+          where: { productId, slug: dto.slug, deletedAt: null, id: { not: variantId } },
+        });
+        if (duplicate) throw new ConflictException(`Variant slug "${dto.slug}" is already in use`);
+      }
+      const attributes = attributeValueIds
+        ? await this.variantAttributeRows(tx, attributeValueIds)
+        : undefined;
+      if (dto.isDefault) {
+        await tx.productVariant.updateMany({
+          where: { productId, id: { not: variantId } },
+          data: { isDefault: false },
+        });
+      }
+      return tx.productVariant.update({
+        where: { id: variantId },
+        data: {
+          ...data,
+          ...(attributes
+            ? { attributes: { deleteMany: {}, create: attributes } }
+            : {}),
+        },
+        include: { attributes: { include: { attribute: true, attributeValue: true } } },
+      });
+    });
+  }
+
+  async removeVariant(productId: number, variantId: number) {
+    await this.variant(productId, variantId);
+    await this.prisma.productVariant.update({
+      where: { id: variantId },
+      data: { deletedAt: new Date(), isDefault: false },
+    });
+  }
+
+  async updateStock(productId: number, variantId: number, dto: UpdateStockDto) {
+    const variant = await this.variant(productId, variantId);
+    if ((dto.stockQty === undefined) === (dto.delta === undefined)) {
+      throw new BadRequestException('Provide exactly one of stockQty or delta');
+    }
+    const stockQty = dto.stockQty ?? variant.stockQty + dto.delta!;
+    if (stockQty < 0) throw new BadRequestException('Stock quantity cannot be negative');
+    return this.prisma.productVariant.update({ where: { id: variantId }, data: { stockQty } });
+  }
+
+  private mapRelationError(error: unknown): never {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+      throw new BadRequestException('One or more related catalog records are invalid');
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      throw new ConflictException('A related category was supplied more than once');
+    }
+    throw error;
+  }
+}
