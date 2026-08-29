@@ -88,54 +88,52 @@ async function main() {
   }
 
   // Category tree (subset from requirement.md)
-  const pcComponents = await prisma.category.upsert({
-    where: { slug: 'pc-components' },
-    update: {},
-    create: { title: 'PC Components', slug: 'pc-components', sortOrder: 1 },
-  });
-  await prisma.category.upsert({
-    where: { slug: 'cpus-processors' },
-    update: {},
-    create: { title: 'CPUs / Processors', slug: 'cpus-processors', parentId: pcComponents.id, sortOrder: 1 },
-  });
-  await prisma.category.upsert({
-    where: { slug: 'graphics-cards' },
-    update: {},
-    create: { title: 'Graphics Cards', slug: 'graphics-cards', parentId: pcComponents.id, sortOrder: 2 },
-  });
+  // Note: Category.slug is no longer a Prisma `@unique` field (it's enforced via a
+  // partial unique index scoped to live rows instead, so soft-deleted slugs can be
+  // reused - see the schema_review_fixes migration), so it can't be used in an
+  // `upsert`/`findUnique` where-clause. Fall back to findFirst + conditional create.
+  const findOrCreateCategory = (where: { slug: string }, create: Parameters<typeof prisma.category.create>[0]['data']) =>
+    prisma.category.findFirst({ where }).then((existing) => existing ?? prisma.category.create({ data: create }));
 
-  const computers = await prisma.category.upsert({
-    where: { slug: 'computers' },
-    update: {},
-    create: { title: 'Computers', slug: 'computers', sortOrder: 2 },
-  });
-  await prisma.category.upsert({
-    where: { slug: 'gaming-pcs' },
-    update: {},
-    create: { title: 'Gaming PCs', slug: 'gaming-pcs', parentId: computers.id, sortOrder: 1 },
-  });
+  const pcComponents = await findOrCreateCategory(
+    { slug: 'pc-components' },
+    { title: 'PC Components', slug: 'pc-components', sortOrder: 1 },
+  );
+  await findOrCreateCategory(
+    { slug: 'cpus-processors' },
+    { title: 'CPUs / Processors', slug: 'cpus-processors', parentId: pcComponents.id, sortOrder: 1 },
+  );
+  await findOrCreateCategory(
+    { slug: 'graphics-cards' },
+    { title: 'Graphics Cards', slug: 'graphics-cards', parentId: pcComponents.id, sortOrder: 2 },
+  );
 
-  const laptops = await prisma.category.upsert({
-    where: { slug: 'laptops' },
-    update: {},
-    create: { title: 'Laptops', slug: 'laptops', sortOrder: 3 },
-  });
-  await prisma.category.upsert({
-    where: { slug: 'gaming-laptops' },
-    update: {},
-    create: { title: 'Gaming Laptops', slug: 'gaming-laptops', parentId: laptops.id, sortOrder: 1 },
-  });
+  const computers = await findOrCreateCategory(
+    { slug: 'computers' },
+    { title: 'Computers', slug: 'computers', sortOrder: 2 },
+  );
+  await findOrCreateCategory(
+    { slug: 'gaming-pcs' },
+    { title: 'Gaming PCs', slug: 'gaming-pcs', parentId: computers.id, sortOrder: 1 },
+  );
 
-  const peripherals = await prisma.category.upsert({
-    where: { slug: 'peripherals' },
-    update: {},
-    create: { title: 'Peripherals', slug: 'peripherals', sortOrder: 4 },
-  });
-  await prisma.category.upsert({
-    where: { slug: 'monitors' },
-    update: {},
-    create: { title: 'Monitors', slug: 'monitors', parentId: peripherals.id, sortOrder: 1 },
-  });
+  const laptops = await findOrCreateCategory(
+    { slug: 'laptops' },
+    { title: 'Laptops', slug: 'laptops', sortOrder: 3 },
+  );
+  await findOrCreateCategory(
+    { slug: 'gaming-laptops' },
+    { title: 'Gaming Laptops', slug: 'gaming-laptops', parentId: laptops.id, sortOrder: 1 },
+  );
+
+  const peripherals = await findOrCreateCategory(
+    { slug: 'peripherals' },
+    { title: 'Peripherals', slug: 'peripherals', sortOrder: 4 },
+  );
+  await findOrCreateCategory(
+    { slug: 'monitors' },
+    { title: 'Monitors', slug: 'monitors', parentId: peripherals.id, sortOrder: 1 },
+  );
 
   // Brands
   for (const title of ['AMD', 'NVIDIA', 'Intel', 'ASUS']) {
@@ -147,35 +145,40 @@ async function main() {
   }
 
   // Demo product + variant (for local frontend development against a non-empty catalog)
-  const graphicsCards = await prisma.category.findUniqueOrThrow({ where: { slug: 'graphics-cards' } });
+  // Product.slug and ProductVariant.slug are likewise no longer `@unique` (same partial-index
+  // reasoning as Category.slug above), so use findFirst-or-create here too.
+  const graphicsCards = await prisma.category.findFirstOrThrow({ where: { slug: 'graphics-cards' } });
   const nvidia = await prisma.brand.findUniqueOrThrow({ where: { slug: 'nvidia' } });
   const newCondition = await prisma.productCondition.findUniqueOrThrow({ where: { slug: 'new' } });
-  const demoProduct = await prisma.product.upsert({
-    where: { slug: 'nvidia-geforce-rtx-4070' },
-    update: {},
-    create: {
-      categoryId: graphicsCards.id,
-      brandId: nvidia.id,
-      productConditionId: newCondition.id,
-      taxRateId: standardVat.id,
-      title: 'NVIDIA GeForce RTX 4070',
-      slug: 'nvidia-geforce-rtx-4070',
-      shortDescription: '12GB GDDR6X graphics card',
-      status: 'ACTIVE',
-    },
-  });
-  await prisma.productVariant.upsert({
-    where: { slug: 'nvidia-geforce-rtx-4070-12gb' },
-    update: {},
-    create: {
-      productId: demoProduct.id,
-      title: '12GB',
-      slug: 'nvidia-geforce-rtx-4070-12gb',
-      price: 549.99,
-      stockQty: 25,
-      isDefault: true,
-    },
-  });
+  const demoProduct = await prisma.product.findFirst({ where: { slug: 'nvidia-geforce-rtx-4070' } }).then(
+    (existing) =>
+      existing ??
+      prisma.product.create({
+        data: {
+          categoryId: graphicsCards.id,
+          brandId: nvidia.id,
+          productConditionId: newCondition.id,
+          taxRateId: standardVat.id,
+          title: 'NVIDIA GeForce RTX 4070',
+          slug: 'nvidia-geforce-rtx-4070',
+          shortDescription: '12GB GDDR6X graphics card',
+          status: 'ACTIVE',
+        },
+      }),
+  );
+  const demoVariantExisting = await prisma.productVariant.findFirst({ where: { slug: 'nvidia-geforce-rtx-4070-12gb' } });
+  if (!demoVariantExisting) {
+    await prisma.productVariant.create({
+      data: {
+        productId: demoProduct.id,
+        title: '12GB',
+        slug: 'nvidia-geforce-rtx-4070-12gb',
+        price: 549.99,
+        stockQty: 25,
+        isDefault: true,
+      },
+    });
+  }
 
   // Settings
   await prisma.setting.upsert({

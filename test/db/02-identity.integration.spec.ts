@@ -90,4 +90,27 @@ describe('Identity & Access', () => {
     const found = await prisma.address.findUnique({ where: { id: addrId } });
     expect(found).toBeNull();
   });
+
+  it('allows a new user to reuse the email of a soft-deleted user, but still blocks duplicates among live users', async () => {
+    const email = 'test-identity-soft-delete-reuse@example.com';
+
+    const first = await prisma.user.create({
+      data: { email, passwordHash: 'hashed', firstName: 'First', lastName: 'User' },
+    });
+    await prisma.user.update({ where: { id: first.id }, data: { deletedAt: new Date() } });
+
+    const second = await prisma.user.create({
+      data: { email, passwordHash: 'hashed', firstName: 'Second', lastName: 'User' },
+    });
+    expect(second.email).toBe(email);
+
+    await expect(
+      prisma.user.create({
+        data: { email, passwordHash: 'hashed', firstName: 'Third', lastName: 'User' },
+      }),
+    ).rejects.toThrow();
+
+    await prisma.user.delete({ where: { id: second.id } });
+    await prisma.user.delete({ where: { id: first.id } });
+  });
 });

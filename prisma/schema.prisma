@@ -64,9 +64,9 @@ enum OtpChannel {
 model User {
   id               Int        @id @default(autoincrement())
   uuid             String     @unique @default(uuid())
-  email            String     @unique
+  email            String
   emailVerifiedAt  DateTime?  @map("email_verified_at")
-  phone            String?    @unique
+  phone            String?
   mobileVerifiedAt DateTime?  @map("mobile_verified_at")
   passwordHash     String     @map("password_hash")
   firstName        String     @map("first_name")
@@ -114,7 +114,7 @@ model Address {
 
 model AdminUser {
   id           Int             @id @default(autoincrement())
-  email        String          @unique
+  email        String
   passwordHash String          @map("password_hash")
   name         String
   status       AdminUserStatus @default(ACTIVE)
@@ -127,6 +127,7 @@ model AdminUser {
 
   orderStatusChanges OrderStatusHistory[]
 
+  @@index([roleId])
   @@map("admin_users")
 }
 
@@ -160,6 +161,7 @@ model RolePermission {
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@id([roleId, permissionId])
+  @@index([permissionId])
   @@map("role_permissions")
 }
 
@@ -213,7 +215,7 @@ model Category {
   parent          Category?     @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
   children        Category[]    @relation("CategoryTree")
   title           String
-  slug            String        @unique
+  slug            String
   description     String?
   sortOrder       Int           @default(0) @map("sort_order")
   isIndexable     Boolean       @default(true) @map("is_indexable")
@@ -263,7 +265,7 @@ model ProductCondition {
 model ProductAttribute {
   id           Int                @id @default(autoincrement())
   title        String
-  slug         String             @unique
+  slug         String
   inputType    AttributeInputType @default(SELECT) @map("input_type")
   isFilterable Boolean            @default(true) @map("is_filterable")
   deletedAt    DateTime?          @map("deleted_at")
@@ -302,8 +304,8 @@ model Product {
   taxRateId          Int?              @map("tax_rate_id")
   taxRate            TaxRate?          @relation(fields: [taxRateId], references: [id], onDelete: SetNull)
   title              String
-  slug               String            @unique
-  sku                String?           @unique
+  slug               String
+  sku                String?
   mpn                String?
   shortDescription   String?           @map("short_description")
   description        String?
@@ -334,6 +336,8 @@ model Product {
 
   @@index([categoryId])
   @@index([brandId])
+  @@index([productConditionId])
+  @@index([taxRateId])
   @@index([status])
   @@map("products")
 }
@@ -345,6 +349,7 @@ model CategoryProduct {
   product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@id([categoryId, productId])
+  @@index([productId])
   @@map("category_products")
 }
 
@@ -354,8 +359,8 @@ model ProductVariant {
   productId         Int           @map("product_id")
   product           Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
   title             String
-  slug              String        @unique
-  barcode           String?       @unique
+  slug              String
+  barcode           String?
   price             Decimal       @db.Decimal(10, 2)
   salePrice         Decimal?      @map("sale_price") @db.Decimal(10, 2)
   stockQty          Int           @default(0) @map("stock_qty")
@@ -389,6 +394,8 @@ model ProductVariantAttribute {
   attributeValue   ProductAttributeValue @relation(fields: [attributeValueId], references: [id], onDelete: Restrict)
 
   @@unique([productVariantId, attributeId])
+  @@index([attributeId])
+  @@index([attributeValueId])
   @@map("product_variant_attributes")
 }
 
@@ -400,6 +407,7 @@ model ProductFaq {
   answer    String
   sortOrder Int     @default(0) @map("sort_order")
 
+  @@index([productId])
   @@map("product_faqs")
 }
 
@@ -425,6 +433,7 @@ model CollectionProduct {
   product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@id([collectionId, productId])
+  @@index([productId])
   @@map("collection_products")
 }
 
@@ -454,6 +463,7 @@ model CartItem {
   updatedAt        DateTime       @updatedAt @map("updated_at")
 
   @@unique([cartId, productVariantId])
+  @@index([productVariantId])
   @@map("cart_items")
 }
 
@@ -468,6 +478,7 @@ model Wishlist {
 
   items WishlistItem[]
 
+  @@unique([userId, slug])
   @@map("wishlists")
 }
 
@@ -480,6 +491,7 @@ model WishlistItem {
   createdAt        DateTime       @default(now()) @map("created_at")
 
   @@unique([wishlistId, productVariantId])
+  @@index([productVariantId])
   @@map("wishlist_items")
 }
 
@@ -494,6 +506,7 @@ model BrowsingHistory {
 
   @@index([userId, viewedAt])
   @@index([sessionId, viewedAt])
+  @@index([productId])
   @@map("browsing_history")
 }
 
@@ -577,6 +590,7 @@ model ShippingRateBand {
   maxWeightKg      Decimal        @map("max_weight_kg") @db.Decimal(6, 3)
   rate             Decimal        @db.Decimal(10, 2)
 
+  @@index([shippingMethodId])
   @@map("shipping_rate_bands")
 }
 
@@ -644,6 +658,7 @@ model Order {
 
   @@index([userId])
   @@index([status])
+  @@index([shippingMethodId])
   @@map("orders")
 }
 
@@ -674,6 +689,8 @@ model OrderItem {
   review  Review?
 
   @@index([orderId])
+  @@index([productId])
+  @@index([productVariantId])
   @@map("order_items")
 }
 
@@ -689,6 +706,7 @@ model OrderStatusHistory {
   createdAt        DateTime   @default(now()) @map("created_at")
 
   @@index([orderId])
+  @@index([changedByAdminId])
   @@map("order_status_history")
 }
 
@@ -709,6 +727,8 @@ model OrderItemReturn {
   createdAt    DateTime      @default(now()) @map("created_at")
   updatedAt    DateTime      @updatedAt @map("updated_at")
 
+  @@index([orderItemId])
+  @@index([userId])
   @@map("order_item_returns")
 }
 
@@ -732,6 +752,8 @@ model Review {
   updatedAt    DateTime     @updatedAt @map("updated_at")
 
   @@index([productId, status])
+  @@index([orderId])
+  @@index([userId])
   @@map("reviews")
 }
 
@@ -774,6 +796,7 @@ model PaymentTransaction {
   refunds  PaymentRefund[]
   disputes PaymentDispute[]
 
+  @@index([orderId])
   @@map("payment_transactions")
 }
 
@@ -791,6 +814,8 @@ model PaymentRefund {
   createdAt        DateTime           @default(now()) @map("created_at")
   updatedAt        DateTime           @updatedAt @map("updated_at")
 
+  @@index([transactionId])
+  @@index([orderId])
   @@map("payment_refunds")
 }
 
@@ -810,6 +835,8 @@ model PaymentDispute {
   createdAt         DateTime           @default(now()) @map("created_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
 
+  @@index([transactionId])
+  @@index([orderId])
   @@map("payment_disputes")
 }
 
@@ -852,7 +879,7 @@ enum MenuLocation {
 
 model Coupon {
   id                Int          @id @default(autoincrement())
-  code              String       @unique
+  code              String
   description       String?
   discountType      DiscountType @map("discount_type")
   discountAmount    Decimal      @map("discount_amount") @db.Decimal(10, 2)
@@ -883,6 +910,7 @@ model OrderCouponLine {
   discountAmount Decimal  @map("discount_amount") @db.Decimal(10, 2)
   createdAt      DateTime @default(now()) @map("created_at")
 
+  @@index([couponId])
   @@map("order_coupon_lines")
 }
 
@@ -906,6 +934,9 @@ model Banner {
   createdAt    DateTime       @default(now()) @map("created_at")
   updatedAt    DateTime       @updatedAt @map("updated_at")
 
+  @@index([productId])
+  @@index([categoryId])
+  @@index([brandId])
   @@map("banners")
 }
 
@@ -921,6 +952,7 @@ model FeaturedSection {
 
   manualProducts FeaturedSectionProduct[]
 
+  @@index([categoryId])
   @@map("featured_sections")
 }
 
@@ -932,6 +964,7 @@ model FeaturedSectionProduct {
   product           Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@id([featuredSectionId, productId])
+  @@index([productId])
   @@map("featured_section_products")
 }
 
@@ -987,6 +1020,9 @@ model MenuItem {
 
   megaMenuPanel MegaMenuPanel?
 
+  @@index([menuId])
+  @@index([parentId])
+  @@index([categoryId])
   @@map("menu_items")
 }
 
@@ -1010,6 +1046,7 @@ model MegaMenuColumn {
 
   links MegaMenuLink[]
 
+  @@index([panelId])
   @@map("mega_menu_columns")
 }
 
@@ -1023,6 +1060,8 @@ model MegaMenuLink {
   href       String?
   sortOrder  Int            @default(0) @map("sort_order")
 
+  @@index([columnId])
+  @@index([categoryId])
   @@map("mega_menu_links")
 }
 
@@ -1081,6 +1120,8 @@ model BlogPost {
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
 
+  @@index([blogCategoryId])
+  @@index([authorId])
   @@map("blog_posts")
 }
 
@@ -1119,6 +1160,7 @@ model Faq {
   sortOrder     Int           @default(0) @map("sort_order")
   status        CatalogStatus @default(ACTIVE)
 
+  @@index([faqCategoryId])
   @@map("faqs")
 }
 
@@ -1240,6 +1282,7 @@ model GiftCard {
 
   transactions GiftCardTransaction[]
 
+  @@index([purchasedByUserId])
   @@map("gift_cards")
 }
 
@@ -1253,5 +1296,7 @@ model GiftCardTransaction {
   type       GiftCardTxnType
   createdAt  DateTime        @default(now()) @map("created_at")
 
+  @@index([giftCardId])
+  @@index([orderId])
   @@map("gift_card_transactions")
 }
