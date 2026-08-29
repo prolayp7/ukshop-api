@@ -21,6 +21,11 @@ async function main() {
     'customers.manage',
     'media.manage',
     'shipping.manage',
+    'admins.manage',
+    'marketing.manage',
+    'reviews.moderate',
+    'gift_cards.manage',
+    'notifications.manage',
   ];
   for (const key of permissionKeys) {
     const permission = await prisma.permission.upsert({

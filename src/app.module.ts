@@ -14,6 +14,12 @@ import { ProductsModule } from './modules/admin/catalog/products/products.module
 import { SettingsModule } from './modules/admin/settings/settings.module';
 import { ShippingMethodsModule } from './modules/admin/shipping/shipping-methods.module';
 import { OrdersModule } from './modules/admin/orders/orders.module';
+import { RbacModule } from './modules/admin/rbac/rbac.module';
+import { CollectionsModule } from './modules/admin/catalog/collections/collections.module';
+import { CouponsModule } from './modules/admin/marketing/coupons/coupons.module';
+import { PaymentOperationsModule } from './modules/admin/payment-operations/payment-operations.module';
+import { ReviewsModule } from './modules/admin/reviews/reviews.module';
+import { GiftCardsModule } from './modules/admin/gift-cards/gift-cards.module';
 
 @Module({
   imports: [
@@ -31,6 +37,12 @@ import { OrdersModule } from './modules/admin/orders/orders.module';
     SettingsModule,
     ShippingMethodsModule,
     OrdersModule,
+    RbacModule,
+    CollectionsModule,
+    CouponsModule,
+    PaymentOperationsModule,
+    ReviewsModule,
+    GiftCardsModule,
   ],
   controllers: [AppController],
 })
