@@ -5,6 +5,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AdminCoreModule } from './common/admin/admin-core.module';
 import { AdminAuthModule } from './modules/admin/auth/admin-auth.module';
 import { CustomersModule } from './modules/admin/customers/customers.module';
+import { CategoriesModule } from './modules/admin/catalog/categories/categories.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { CustomersModule } from './modules/admin/customers/customers.module';
     AdminCoreModule,
     AdminAuthModule,
     CustomersModule,
+    CategoriesModule,
   ],
   controllers: [AppController],
 })
