@@ -1022,3 +1022,126 @@ model MegaMenuLink {
 
   @@map("mega_menu_links")
 }
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum EnquiryStatus {
+  NEW
+  IN_PROGRESS
+  RESOLVED
+}
+
+model BlogCategory {
+  id        Int           @id @default(autoincrement())
+  title     String
+  slug      String        @unique
+  sortOrder Int           @default(0) @map("sort_order")
+  status    CatalogStatus @default(ACTIVE)
+
+  posts BlogPost[]
+
+  @@map("blog_categories")
+}
+
+model Author {
+  id     Int           @id @default(autoincrement())
+  name   String
+  role   String?
+  bio    String?
+  status CatalogStatus @default(ACTIVE)
+
+  posts BlogPost[]
+
+  @@map("authors")
+}
+
+model BlogPost {
+  id              Int           @id @default(autoincrement())
+  uuid            String        @unique @default(uuid())
+  blogCategoryId  Int?          @map("blog_category_id")
+  blogCategory    BlogCategory? @relation(fields: [blogCategoryId], references: [id], onDelete: SetNull)
+  authorId        Int?          @map("author_id")
+  author          Author?       @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  title           String
+  slug            String        @unique
+  excerpt         String?
+  content         String
+  tags            Json?
+  isFeatured      Boolean       @default(false) @map("is_featured")
+  status          ContentStatus @default(DRAFT)
+  publishedAt     DateTime?     @map("published_at")
+  metaTitle       String?       @map("meta_title")
+  metaDescription String?       @map("meta_description")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  @@map("blog_posts")
+}
+
+model Page {
+  id              Int           @id @default(autoincrement())
+  slug            String        @unique
+  title           String
+  contentBlocks   Json?         @map("content_blocks")
+  metaTitle       String?       @map("meta_title")
+  metaDescription String?       @map("meta_description")
+  status          ContentStatus @default(DRAFT)
+  isSystemPage    Boolean       @default(false) @map("is_system_page")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  @@map("pages")
+}
+
+model FaqCategory {
+  id        Int           @id @default(autoincrement())
+  name      String
+  sortOrder Int           @default(0) @map("sort_order")
+  status    CatalogStatus @default(ACTIVE)
+
+  faqs Faq[]
+
+  @@map("faq_categories")
+}
+
+model Faq {
+  id            Int           @id @default(autoincrement())
+  faqCategoryId Int?          @map("faq_category_id")
+  faqCategory   FaqCategory?  @relation(fields: [faqCategoryId], references: [id], onDelete: SetNull)
+  question      String
+  answer        String
+  sortOrder     Int           @default(0) @map("sort_order")
+  status        CatalogStatus @default(ACTIVE)
+
+  @@map("faqs")
+}
+
+model Testimonial {
+  id        Int           @id @default(autoincrement())
+  name      String
+  title     String?
+  quote     String
+  stars     Int
+  sortOrder Int           @default(0) @map("sort_order")
+  status    CatalogStatus @default(ACTIVE)
+
+  @@map("testimonials")
+}
+
+model Enquiry {
+  id        Int           @id @default(autoincrement())
+  type      String
+  name      String
+  email     String?
+  phone     String?
+  subject   String?
+  message   String
+  status    EnquiryStatus @default(NEW)
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  @@map("enquiries")
+}
