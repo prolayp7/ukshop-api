@@ -64,6 +64,12 @@ export class ProductsController {
     return this.service.update(id, dto);
   }
 
+  @Post(':id/duplicate')
+  @HttpCode(201)
+  duplicate(@Param('id', ParseIntPipe) id: number) {
+    return this.service.duplicate(id);
+  }
+
   @Delete(':id')
   @HttpCode(204)
   async remove(@Param('id', ParseIntPipe) id: number): Promise<void> {

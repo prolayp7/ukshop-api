@@ -11,6 +11,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  Matches,
 } from 'class-validator';
 
 export class CreateProductDto {
@@ -51,6 +52,16 @@ export class CreateProductDto {
 
   @IsOptional()
   @IsString()
+  @Matches(/^(?:\d{8}|\d{12,14})$/, { message: 'gtin must contain 8, 12, 13 or 14 digits' })
+  gtin?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{12}$/, { message: 'upc must contain exactly 12 digits' })
+  upc?: string;
+
+  @IsOptional()
+  @IsString()
   shortDescription?: string;
 
   @IsOptional()
@@ -65,6 +76,14 @@ export class CreateProductDto {
   @IsInt()
   @Min(0)
   warrantyMonths?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  allowCustomization?: boolean;
+
+  @IsOptional()
+  @IsString()
+  customizationInstructions?: string;
 
   @IsOptional()
   @IsBoolean()
@@ -105,4 +124,10 @@ export class CreateProductDto {
   @ArrayUnique()
   @IsInt({ each: true })
   secondaryCategoryIds?: number[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsInt({ each: true })
+  relatedProductIds?: number[];
 }

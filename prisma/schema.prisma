@@ -322,10 +322,14 @@ model Product {
   slug               String
   sku                String?
   mpn                String?
+  gtin               String?           @db.VarChar(14)
+  upc                String?           @db.VarChar(12)
   shortDescription   String?           @map("short_description")
   description        String?
   specsSummary       Json?             @map("specs_summary")
   warrantyMonths     Int?              @map("warranty_months")
+  allowCustomization Boolean           @default(false) @map("allow_customization")
+  customizationInstructions String?    @map("customization_instructions")
   isReturnable       Boolean           @default(true) @map("is_returnable")
   returnableDays     Int               @default(30) @map("returnable_days")
   status             ProductStatus     @default(DRAFT)
@@ -340,6 +344,8 @@ model Product {
 
   variants               ProductVariant[]
   secondaryCategories    CategoryProduct[]
+  relatedProducts        ProductRelated[] @relation("ProductRelatedSource")
+  relatedTo              ProductRelated[] @relation("ProductRelatedTarget")
   faqs                   ProductFaq[]
   collections            CollectionProduct[]
   browsingHistory        BrowsingHistory[]
@@ -355,6 +361,17 @@ model Product {
   @@index([taxRateId])
   @@index([status])
   @@map("products")
+}
+
+model ProductRelated {
+  productId        Int     @map("product_id")
+  relatedProductId Int     @map("related_product_id")
+  product          Product @relation("ProductRelatedSource", fields: [productId], references: [id], onDelete: Cascade)
+  relatedProduct   Product @relation("ProductRelatedTarget", fields: [relatedProductId], references: [id], onDelete: Cascade)
+
+  @@id([productId, relatedProductId])
+  @@index([relatedProductId])
+  @@map("product_related")
 }
 
 model CategoryProduct {

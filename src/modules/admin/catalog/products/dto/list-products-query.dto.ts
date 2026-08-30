@@ -1,9 +1,15 @@
 import { ProductStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
-import { IsBoolean, IsEnum, IsInt, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 import { PaginationQueryDto } from '../../../../../common/dto/pagination-query.dto';
 
 export class ListProductsQueryDto extends PaginationQueryDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) idMin?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) idMax?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) priceMin?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) priceMax?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) stockMin?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) stockMax?: number;
   @IsOptional()
   @IsString()
   q?: string;

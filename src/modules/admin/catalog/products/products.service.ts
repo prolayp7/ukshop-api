@@ -21,6 +21,7 @@ const productDetailInclude = {
   productCondition: true,
   taxRate: true,
   secondaryCategories: { include: { category: true } },
+  relatedProducts: { include: { relatedProduct: true } },
   faqs: { orderBy: { sortOrder: 'asc' as const } },
   variants: {
     where: { deletedAt: null },
@@ -40,6 +41,7 @@ export class ProductsService {
     const perPage = query.perPage!;
     const where: Prisma.ProductWhereInput = {
       ...(query.includeDeleted ? {} : { deletedAt: null }),
+      ...(query.idMin !== undefined || query.idMax !== undefined ? { id: { ...(query.idMin !== undefined ? { gte: query.idMin } : {}), ...(query.idMax !== undefined ? { lte: query.idMax } : {}) } } : {}),
       ...(query.categoryId
         ? {
             OR: [
@@ -64,16 +66,55 @@ export class ProductsService {
             ],
           }
         : {}),
+      ...(query.priceMin !== undefined || query.priceMax !== undefined || query.stockMin !== undefined || query.stockMax !== undefined ? { variants: { some: { deletedAt: null, ...(query.priceMin !== undefined || query.priceMax !== undefined ? { price: { ...(query.priceMin !== undefined ? { gte: query.priceMin } : {}), ...(query.priceMax !== undefined ? { lte: query.priceMax } : {}) } } : {}), ...(query.stockMin !== undefined || query.stockMax !== undefined ? { stockQty: { ...(query.stockMin !== undefined ? { gte: query.stockMin } : {}), ...(query.stockMax !== undefined ? { lte: query.stockMax } : {}) } } : {}) } } } : {}),
     };
-    const [items, total] = await Promise.all([
+    const [products, total] = await Promise.all([
       this.prisma.product.findMany({
         where,
         ...paginationSkipTake(page, perPage),
-        include: { category: true, brand: true, _count: { select: { variants: true } } },
+        include: {
+          category: true,
+          brand: true,
+          taxRate: true,
+          variants: {
+            where: { deletedAt: null },
+            select: {
+              id: true,
+              price: true,
+              salePrice: true,
+              stockQty: true,
+              lowStockThreshold: true,
+              isDefault: true,
+              status: true,
+            },
+            orderBy: [{ isDefault: 'desc' }, { id: 'asc' }],
+          },
+          _count: { select: { variants: true } },
+        },
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.product.count({ where }),
     ]);
+    const productIds = products.map((product) => product.id);
+    const media = productIds.length
+      ? await this.prisma.media.findMany({
+          where: { ownerType: 'PRODUCT', ownerId: { in: productIds } },
+          orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+        })
+      : [];
+    const firstMediaByProduct = new Map<number, (typeof media)[number]>();
+    for (const item of media) {
+      if (!firstMediaByProduct.has(item.ownerId)) firstMediaByProduct.set(item.ownerId, item);
+    }
+    const items = products.map((product) => ({
+      ...product,
+      featuredMedia: firstMediaByProduct.get(product.id) ?? null,
+      inventory: {
+        stockQty: product.variants.reduce((sum, variant) => sum + variant.stockQty, 0),
+        lowStock: product.variants.some((variant) => variant.stockQty <= variant.lowStockThreshold),
+        outOfStock: product.variants.length > 0 && product.variants.every((variant) => variant.stockQty === 0),
+      },
+    }));
     return { items, meta: buildPaginationMeta(page, perPage, total) };
   }
 
@@ -95,7 +136,7 @@ export class ProductsService {
   }
 
   private productData(dto: CreateProductDto | UpdateProductDto) {
-    const { secondaryCategoryIds: _secondaryCategoryIds, specsSummary, ...fields } = dto;
+    const { secondaryCategoryIds: _secondaryCategoryIds, relatedProductIds: _relatedProductIds, specsSummary, ...fields } = dto;
     return {
       ...fields,
       ...(specsSummary !== undefined
@@ -113,6 +154,11 @@ export class ProductsService {
       if (dto.secondaryCategoryIds?.length) {
         await tx.categoryProduct.createMany({
           data: dto.secondaryCategoryIds.map((categoryId) => ({ productId: product.id, categoryId })),
+        });
+      }
+      if (dto.relatedProductIds?.length) {
+        await tx.productRelated.createMany({
+          data: dto.relatedProductIds.map((relatedProductId) => ({ productId: product.id, relatedProductId })),
         });
       }
       return tx.product.findUniqueOrThrow({ where: { id: product.id }, include: productDetailInclude });
@@ -135,7 +181,117 @@ export class ProductsService {
           });
         }
       }
+      if (dto.relatedProductIds !== undefined) {
+        if (dto.relatedProductIds.includes(id)) {
+          throw new BadRequestException('A product cannot be related to itself');
+        }
+        await tx.productRelated.deleteMany({ where: { productId: id } });
+        if (dto.relatedProductIds.length) {
+          await tx.productRelated.createMany({
+            data: dto.relatedProductIds.map((relatedProductId) => ({ productId: id, relatedProductId })),
+          });
+        }
+      }
       return tx.product.findUniqueOrThrow({ where: { id }, include: productDetailInclude });
+    }).catch((error: unknown) => this.mapRelationError(error));
+  }
+
+  async duplicate(id: number) {
+    const source = await this.detail(id);
+    const baseSlug = `${source.slug}-copy`;
+    let slug = baseSlug;
+    let suffix = 2;
+    while (await this.prisma.product.findFirst({
+      where: { slug, deletedAt: null },
+      select: { id: true },
+    })) {
+      slug = `${baseSlug}-${suffix}`;
+      suffix += 1;
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const product = await tx.product.create({
+        data: {
+          categoryId: source.categoryId,
+          brandId: source.brandId,
+          productConditionId: source.productConditionId,
+          taxRateId: source.taxRateId,
+          title: `${source.title} (copy)`,
+          slug,
+          sku: null,
+          mpn: null,
+          gtin: null,
+          upc: null,
+          shortDescription: source.shortDescription,
+          description: source.description,
+          ...(source.specsSummary !== null
+            ? { specsSummary: source.specsSummary as Prisma.InputJsonValue }
+            : {}),
+          warrantyMonths: source.warrantyMonths,
+          allowCustomization: source.allowCustomization,
+          customizationInstructions: source.customizationInstructions,
+          isReturnable: source.isReturnable,
+          returnableDays: source.returnableDays,
+          status: 'DRAFT',
+          isFeatured: false,
+          isTopProduct: false,
+          isIndexable: source.isIndexable,
+          metaTitle: source.metaTitle,
+          metaDescription: source.metaDescription,
+        },
+      });
+
+      if (source.secondaryCategories.length) {
+        await tx.categoryProduct.createMany({
+          data: source.secondaryCategories.map(({ categoryId }) => ({
+            productId: product.id,
+            categoryId,
+          })),
+        });
+      }
+
+      if (source.faqs.length) {
+        await tx.productFaq.createMany({
+          data: source.faqs.map(({ question, answer, sortOrder }) => ({
+            productId: product.id,
+            question,
+            answer,
+            sortOrder,
+          })),
+        });
+      }
+
+      for (const variant of source.variants) {
+        await tx.productVariant.create({
+          data: {
+            productId: product.id,
+            title: variant.title,
+            slug: variant.slug,
+            barcode: null,
+            price: variant.price,
+            salePrice: variant.salePrice,
+            stockQty: variant.stockQty,
+            lowStockThreshold: variant.lowStockThreshold,
+            weightKg: variant.weightKg,
+            lengthCm: variant.lengthCm,
+            widthCm: variant.widthCm,
+            heightCm: variant.heightCm,
+            isDefault: variant.isDefault,
+            status: variant.status,
+            attributes: {
+              create: variant.attributes.map(({ attributeId, attributeValueId }) => ({
+                attributeId,
+                attributeValueId,
+              })),
+            },
+          },
+        });
+      }
+
+      return tx.product.findUniqueOrThrow({
+        where: { id: product.id },
+        include: productDetailInclude,
+      });
     }).catch((error: unknown) => this.mapRelationError(error));
   }
 
