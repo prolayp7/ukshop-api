@@ -9,7 +9,7 @@ import { UpsertSettingDto } from './dto/upsert-setting.dto';
 import { SaveIntegrationDto } from './dto/integration-settings.dto';
 
 const scopes = ['payment.paypal', 'payment.2checkout', 'payment.stripe', 'delivery.fedex', 'delivery.evri', 'email.smtp'] as const;
-type Scope = typeof scopes[number];
+export type IntegrationScope = typeof scopes[number];
 type StoredIntegration = { encrypted: string; iv: string; tag: string; mode: 'SANDBOX' | 'LIVE'; updatedAt: string };
 
 @Injectable()
@@ -33,8 +33,8 @@ export class SettingsService {
     });
   }
 
-  private assertScope(value: string): asserts value is Scope {
-    if (!scopes.includes(value as Scope)) throw new BadRequestException('Unknown integration');
+  private assertScope(value: string): asserts value is IntegrationScope {
+    if (!scopes.includes(value as IntegrationScope)) throw new BadRequestException('Unknown integration');
   }
 
   private encryptionKey() {
@@ -91,5 +91,12 @@ export class SettingsService {
     const value: StoredIntegration = { ...this.encrypt(dto.settings), mode: dto.mode, updatedAt: new Date().toISOString() };
     await this.prisma.setting.upsert({ where: { key: `integration.${scope}` }, create: { key: `integration.${scope}`, value: value as unknown as Prisma.InputJsonValue }, update: { value: value as unknown as Prisma.InputJsonValue } });
     return { scope, configured: true, mode: dto.mode, updatedAt: value.updatedAt };
+  }
+
+  async internalIntegration(scope: IntegrationScope) {
+    const row = await this.prisma.setting.findUnique({ where: { key: `integration.${scope}` } });
+    if (!row) return null;
+    const record = row.value as unknown as StoredIntegration;
+    return { mode: record.mode, settings: this.decrypt(record) };
   }
 }

@@ -99,7 +99,11 @@ export class ProductsService {
     const productIds = products.map((product) => product.id);
     const media = productIds.length
       ? await this.prisma.media.findMany({
-          where: { ownerType: 'PRODUCT', ownerId: { in: productIds } },
+          where: {
+            ownerType: 'PRODUCT',
+            ownerId: { in: productIds },
+            metadata: { path: ['mimeType'], string_starts_with: 'image/' },
+          },
           orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
         })
       : [];

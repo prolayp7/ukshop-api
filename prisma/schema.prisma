@@ -749,6 +749,7 @@ model Order {
   paymentAttempts      PaymentAttempt[]
   paymentRefunds       PaymentRefund[]
   paymentDisputes      PaymentDispute[]
+  shipments            Shipment[]
   couponLine           OrderCouponLine?
   giftCardTransactions GiftCardTransaction[]
 
@@ -1014,6 +1015,81 @@ model PaymentWebhookLog {
   createdAt       DateTime  @default(now()) @map("created_at")
 
   @@map("payment_webhook_logs")
+}
+
+enum DeliveryCarrier {
+  FEDEX
+  EVRI
+}
+
+enum ShipmentStatus {
+  CREATED
+  BOOKING
+  LABEL_READY
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  EXCEPTION
+  CANCELLED
+  UNKNOWN
+}
+
+model Shipment {
+  id                  Int             @id @default(autoincrement())
+  uuid                String          @unique @default(uuid())
+  orderId             Int             @map("order_id")
+  order               Order           @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  carrier             DeliveryCarrier
+  idempotencyKey      String          @map("idempotency_key")
+  carrierShipmentId   String?         @map("carrier_shipment_id")
+  trackingNumber      String?         @map("tracking_number")
+  trackingUrl         String?         @map("tracking_url")
+  serviceCode         String          @map("service_code")
+  status              ShipmentStatus  @default(CREATED)
+  weightKg            Decimal         @map("weight_kg") @db.Decimal(8, 3)
+  lengthCm            Decimal?        @map("length_cm") @db.Decimal(8, 2)
+  widthCm             Decimal?        @map("width_cm") @db.Decimal(8, 2)
+  heightCm            Decimal?        @map("height_cm") @db.Decimal(8, 2)
+  declaredValue       Decimal         @map("declared_value") @db.Decimal(10, 2)
+  currency            String          @default("GBP")
+  shippingCost        Decimal?        @map("shipping_cost") @db.Decimal(10, 2)
+  labelFormat         String          @default("PDF") @map("label_format")
+  labelUrl            String?         @map("label_url")
+  estimatedDeliveryAt DateTime?       @map("estimated_delivery_at")
+  deliveredAt         DateTime?       @map("delivered_at")
+  failureCode         String?         @map("failure_code")
+  failureMessage      String?         @map("failure_message")
+  retryable           Boolean         @default(false)
+  rawPayload          Json?           @map("raw_payload")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+
+  events ShipmentEvent[]
+
+  @@unique([carrier, idempotencyKey])
+  @@unique([carrier, carrierShipmentId])
+  @@unique([carrier, trackingNumber])
+  @@index([orderId, createdAt])
+  @@index([status, updatedAt])
+  @@map("shipments")
+}
+
+model ShipmentEvent {
+  id              Int            @id @default(autoincrement())
+  shipmentId      Int            @map("shipment_id")
+  shipment        Shipment       @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  providerEventId String?        @map("provider_event_id")
+  status          ShipmentStatus
+  eventCode       String?        @map("event_code")
+  description     String?
+  location        String?
+  occurredAt      DateTime       @map("occurred_at")
+  payload         Json?
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  @@unique([shipmentId, providerEventId])
+  @@index([shipmentId, occurredAt])
+  @@map("shipment_events")
 }
 
 enum DiscountType {
