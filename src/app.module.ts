@@ -7,6 +7,7 @@ import { AdminAuthModule } from './modules/admin/auth/admin-auth.module';
 import { CustomersModule } from './modules/admin/customers/customers.module';
 import { CategoriesModule } from './modules/admin/catalog/categories/categories.module';
 import { BrandsModule } from './modules/admin/catalog/brands/brands.module';
+import { SuppliersModule } from './modules/admin/catalog/suppliers/suppliers.module';
 import { ProductConditionsModule } from './modules/admin/catalog/product-conditions/product-conditions.module';
 import { TaxRatesModule } from './modules/admin/catalog/tax-rates/tax-rates.module';
 import { ProductAttributesModule } from './modules/admin/catalog/product-attributes/product-attributes.module';
@@ -26,6 +27,7 @@ import { CmsModule } from './modules/admin/cms/cms.module';
 import { NotificationsModule } from './modules/admin/notifications/notifications.module';
 import { ReportsModule } from './modules/admin/reports/reports.module';
 import { MediaModule } from './modules/admin/media/media.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 
 @Module({
   imports: [
@@ -36,6 +38,7 @@ import { MediaModule } from './modules/admin/media/media.module';
     CustomersModule,
     CategoriesModule,
     BrandsModule,
+    SuppliersModule,
     ProductConditionsModule,
     TaxRatesModule,
     ProductAttributesModule,
@@ -55,6 +58,7 @@ import { MediaModule } from './modules/admin/media/media.module';
     NotificationsModule,
     ReportsModule,
     MediaModule,
+    PaymentsModule,
   ],
   controllers: [AppController],
 })

@@ -14,6 +14,7 @@ export class BrandsService {
       this.prisma.brand.findMany({
         ...paginationSkipTake(page, perPage),
         orderBy: { title: 'asc' },
+        include: { _count: { select: { products: true } } },
       }),
       this.prisma.brand.count(),
     ]);

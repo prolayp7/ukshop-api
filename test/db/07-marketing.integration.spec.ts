@@ -74,7 +74,12 @@ describe('Marketing & Merchandising', () => {
 
   it('applies a coupon to an order exactly once', async () => {
     const coupon = await prisma.coupon.create({
-      data: { code: 'TESTCOUPON10', discountType: 'PERCENT', discountAmount: 10 },
+      data: {
+        code: 'TESTCOUPON10',
+        name: 'Test coupon 10%',
+        discountType: 'PERCENT',
+        discountAmount: 10,
+      },
     });
     couponId = coupon.id;
 

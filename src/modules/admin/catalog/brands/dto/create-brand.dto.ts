@@ -16,6 +16,10 @@ export class CreateBrandDto {
   @IsString()
   description?: string;
 
+  @IsOptional() @IsString() shortDescription?: string;
+  @IsOptional() @IsString() @MaxLength(255) metaTitle?: string;
+  @IsOptional() @IsString() metaDescription?: string;
+
   @IsOptional()
   @IsEnum(CatalogStatus)
   status?: CatalogStatus;

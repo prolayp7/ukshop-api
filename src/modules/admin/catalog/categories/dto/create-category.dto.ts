@@ -1,4 +1,4 @@
-import { IsBoolean, IsInt, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { CatalogStatus } from '@prisma/client';
 import { IsEnum } from 'class-validator';
 
@@ -22,6 +22,10 @@ export class CreateCategoryDto {
   description?: string;
 
   @IsOptional()
+  @IsString()
+  additionalDescription?: string;
+
+  @IsOptional()
   @IsInt()
   sortOrder?: number;
 
@@ -37,6 +41,14 @@ export class CreateCategoryDto {
   @IsOptional()
   @IsString()
   metaDescription?: string;
+
+  @IsOptional()
+  @IsIn(['NOT_FOUND', 'GONE', 'REDIRECT_CATEGORY_301', 'REDIRECT_CATEGORY_302'])
+  offlineRedirectBehavior?: 'NOT_FOUND' | 'GONE' | 'REDIRECT_CATEGORY_301' | 'REDIRECT_CATEGORY_302';
+
+  @IsOptional()
+  @IsInt()
+  redirectTargetCategoryId?: number;
 
   @IsOptional()
   @IsEnum(CatalogStatus)

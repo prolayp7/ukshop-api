@@ -1,18 +1,69 @@
 import { ProductStatus } from '@prisma/client';
+import { Type } from 'class-transformer';
 import {
   ArrayUnique,
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
+  IsNumber,
   IsObject,
   IsOptional,
   IsString,
+  IsDateString,
   MaxLength,
   Min,
   MinLength,
   Matches,
+  ValidateNested,
 } from 'class-validator';
+
+class InitialProductVariantDto {
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  price: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  salePrice?: number;
+
+  @IsInt()
+  @Min(0)
+  stockQty: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  lowStockThreshold?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @Min(0)
+  weightKg?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  widthCm?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  heightCm?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  lengthCm?: number;
+}
 
 export class CreateProductDto {
   @IsInt()
@@ -21,6 +72,10 @@ export class CreateProductDto {
   @IsOptional()
   @IsInt()
   brandId?: number;
+
+  @IsOptional()
+  @IsInt()
+  supplierId?: number;
 
   @IsOptional()
   @IsInt()
@@ -86,6 +141,75 @@ export class CreateProductDto {
   customizationInstructions?: string;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  costPrice?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  minimumOrderQuantity?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  stockLocation?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  receiveLowStockAlert?: boolean;
+
+  @IsOptional()
+  @IsIn(['DENY', 'ALLOW'])
+  outOfStockBehavior?: 'DENY' | 'ALLOW';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  inStockLabel?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  outOfStockLabel?: string;
+
+  @IsOptional()
+  @IsDateString()
+  availabilityDate?: string;
+
+  @IsOptional()
+  @IsIn(['NONE', 'DEFAULT', 'SPECIFIC'])
+  deliveryTimeMode?: 'NONE' | 'DEFAULT' | 'SPECIFIC';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  inStockDeliveryTime?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  outOfStockDeliveryTime?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  additionalShippingCost?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsInt({ each: true })
+  shippingMethodIds?: number[];
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => InitialProductVariantDto)
+  initialVariant?: InitialProductVariantDto;
+
+  @IsOptional()
   @IsBoolean()
   isReturnable?: boolean;
 
@@ -118,6 +242,21 @@ export class CreateProductDto {
   @IsOptional()
   @IsString()
   metaDescription?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  @MaxLength(60, { each: true })
+  seoTags?: string[];
+
+  @IsOptional()
+  @IsIn(['NOT_FOUND', 'GONE', 'REDIRECT_CATEGORY_301', 'REDIRECT_CATEGORY_302'])
+  offlineRedirectBehavior?: 'NOT_FOUND' | 'GONE' | 'REDIRECT_CATEGORY_301' | 'REDIRECT_CATEGORY_302';
+
+  @IsOptional()
+  @IsInt()
+  redirectTargetCategoryId?: number;
 
   @IsOptional()
   @IsArray()

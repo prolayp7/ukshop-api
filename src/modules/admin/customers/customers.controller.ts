@@ -18,6 +18,11 @@ export class CustomersController {
     return this.customersService.list(query);
   }
 
+  @Get('summary')
+  summary() {
+    return this.customersService.summary();
+  }
+
   @Get(':id')
   detail(@Param('id', ParseIntPipe) id: number) {
     return this.customersService.detail(id);

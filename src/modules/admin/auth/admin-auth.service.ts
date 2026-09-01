@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'crypto';
@@ -122,5 +122,35 @@ export class AdminAuthService {
       roleId: adminUser.roleId,
       permissionKeys: adminUser.role.permissions.map((rp) => rp.permission.key),
     };
+  }
+
+  async updateAccount(adminUserId: number, input: { name?: string; email?: string }): Promise<AuthenticatedAdmin> {
+    const email = input.email?.trim().toLowerCase();
+    if (email) {
+      const existing = await this.prisma.adminUser.findFirst({
+        where: { email: { equals: email, mode: 'insensitive' }, id: { not: adminUserId }, deletedAt: null },
+      });
+      if (existing) throw new ConflictException('That email address is already in use');
+    }
+    await this.prisma.adminUser.update({
+      where: { id: adminUserId },
+      data: { ...(input.name !== undefined ? { name: input.name.trim() } : {}), ...(email ? { email } : {}) },
+    });
+    return this.me(adminUserId);
+  }
+
+  async changePassword(adminUserId: number, currentPassword: string, newPassword: string) {
+    const admin = await this.prisma.adminUser.findUnique({ where: { id: adminUserId } });
+    if (!admin || !(await bcrypt.compare(currentPassword, admin.passwordHash))) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+    if (await bcrypt.compare(newPassword, admin.passwordHash)) {
+      throw new ConflictException('Choose a password you have not already used');
+    }
+    await this.prisma.adminUser.update({
+      where: { id: adminUserId },
+      data: { passwordHash: await bcrypt.hash(newPassword, 10) },
+    });
+    return { message: 'Password updated successfully' };
   }
 }

@@ -19,6 +19,27 @@ const detailInclude = {
 export class OrdersService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async summary() {
+    const revenueStatuses: OrderStatus[] = ['PROCESSING', 'PACKED', 'SHIPPED', 'DELIVERED'];
+    const [totalOrders, awaitingPayment, failedPayments, revenue, average] = await Promise.all([
+      this.prisma.order.count(),
+      this.prisma.order.count({ where: { status: 'AWAITING_PAYMENT' } }),
+      this.prisma.order.count({ where: { paymentStatus: 'FAILED' } }),
+      this.prisma.order.aggregate({
+        where: { status: { in: revenueStatuses } },
+        _sum: { total: true },
+      }),
+      this.prisma.order.aggregate({ _avg: { total: true } }),
+    ]);
+    return {
+      totalOrders,
+      awaitingPayment,
+      failedPayments,
+      revenue: Number(revenue._sum.total ?? 0),
+      averageOrderValue: Number(average._avg.total ?? 0),
+    };
+  }
+
   async list(query: ListOrdersQueryDto) {
     const page = query.page!;
     const perPage = query.perPage!;

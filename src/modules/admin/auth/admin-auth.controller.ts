@@ -1,10 +1,11 @@
-import { Body, Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Patch, Post, UseGuards } from '@nestjs/common';
 import { AdminAuthService } from './admin-auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { AdminAuthGuard } from '../../../common/admin/admin-auth.guard';
 import { CurrentAdmin } from '../../../common/admin/current-admin.decorator';
 import { AuthenticatedAdmin } from '../../../common/admin/admin-request';
+import { ChangePasswordDto, UpdateAccountDto } from './dto/update-account.dto';
 
 @Controller('admin/auth')
 export class AdminAuthController {
@@ -37,5 +38,16 @@ export class AdminMeController {
   @Get()
   me(@CurrentAdmin() admin: AuthenticatedAdmin) {
     return this.adminAuthService.me(admin.id);
+  }
+
+  @Patch()
+  update(@CurrentAdmin() admin: AuthenticatedAdmin, @Body() dto: UpdateAccountDto) {
+    return this.adminAuthService.updateAccount(admin.id, dto);
+  }
+
+  @Post('password')
+  @HttpCode(200)
+  changePassword(@CurrentAdmin() admin: AuthenticatedAdmin, @Body() dto: ChangePasswordDto) {
+    return this.adminAuthService.changePassword(admin.id, dto.currentPassword, dto.newPassword);
   }
 }

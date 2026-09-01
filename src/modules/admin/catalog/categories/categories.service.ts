@@ -23,7 +23,11 @@ export class CategoriesService {
       this.prisma.category.findMany({
         where,
         ...paginationSkipTake(page, perPage),
-        orderBy: { sortOrder: 'asc' },
+        include: {
+          parent: { select: { id: true, title: true } },
+          _count: { select: { products: true, secondaryProducts: true, children: true } },
+        },
+        orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }],
       }),
       this.prisma.category.count({ where }),
     ]);

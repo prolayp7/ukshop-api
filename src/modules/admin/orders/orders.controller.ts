@@ -18,6 +18,7 @@ export class OrdersController {
   constructor(private readonly service: OrdersService) {}
 
   @Get() list(@Query() query: ListOrdersQueryDto) { return this.service.list(query); }
+  @Get('summary') summary() { return this.service.summary(); }
   @Get(':id') detail(@Param('id', ParseIntPipe) id: number) { return this.service.detail(id); }
 
   @Patch(':id/status')

@@ -225,21 +225,24 @@ model TaxRate {
 }
 
 model Category {
-  id              Int           @id @default(autoincrement())
-  parentId        Int?          @map("parent_id")
-  parent          Category?     @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
-  children        Category[]    @relation("CategoryTree")
-  title           String
-  slug            String
-  description     String?
-  sortOrder       Int           @default(0) @map("sort_order")
-  isIndexable     Boolean       @default(true) @map("is_indexable")
-  metaTitle       String?       @map("meta_title")
-  metaDescription String?       @map("meta_description")
-  status          CatalogStatus @default(ACTIVE)
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
-  deletedAt       DateTime?     @map("deleted_at")
+  id                       Int           @id @default(autoincrement())
+  parentId                 Int?          @map("parent_id")
+  parent                   Category?     @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children                 Category[]    @relation("CategoryTree")
+  title                    String
+  slug                     String
+  description              String?
+  additionalDescription    String?       @map("additional_description")
+  sortOrder                Int           @default(0) @map("sort_order")
+  isIndexable              Boolean       @default(true) @map("is_indexable")
+  metaTitle                String?       @map("meta_title")
+  metaDescription          String?       @map("meta_description")
+  offlineRedirectBehavior  String        @default("NOT_FOUND") @map("offline_redirect_behavior")
+  redirectTargetCategoryId Int?          @map("redirect_target_category_id")
+  status                   CatalogStatus @default(ACTIVE)
+  createdAt                DateTime      @default(now()) @map("created_at")
+  updatedAt                DateTime      @updatedAt @map("updated_at")
+  deletedAt                DateTime?     @map("deleted_at")
 
   products          Product[]
   secondaryProducts CategoryProduct[]
@@ -253,18 +256,47 @@ model Category {
 }
 
 model Brand {
-  id          Int           @id @default(autoincrement())
-  title       String
-  slug        String        @unique
-  description String?
-  status      CatalogStatus @default(ACTIVE)
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
+  id               Int           @id @default(autoincrement())
+  title            String
+  slug             String        @unique
+  description      String?
+  shortDescription String?       @map("short_description")
+  metaTitle        String?       @map("meta_title")
+  metaDescription  String?       @map("meta_description")
+  status           CatalogStatus @default(ACTIVE)
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
 
   products Product[]
   banners  Banner[]
 
   @@map("brands")
+}
+
+model Supplier {
+  id              Int           @id @default(autoincrement())
+  title           String
+  slug            String        @unique
+  description     String?
+  phone           String?
+  mobilePhone     String?       @map("mobile_phone")
+  email           String?
+  addressLine1    String?       @map("address_line_1")
+  addressLine2    String?       @map("address_line_2")
+  city            String?
+  county          String?
+  postcode        String?
+  countryCode     String        @default("GB") @map("country_code")
+  companyNumber   String?       @map("company_number")
+  vatNumber       String?       @map("vat_number")
+  metaTitle       String?       @map("meta_title")
+  metaDescription String?       @map("meta_description")
+  status          CatalogStatus @default(ACTIVE)
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  products        Product[]
+
+  @@map("suppliers")
 }
 
 model ProductCondition {
@@ -308,44 +340,61 @@ model ProductAttributeValue {
 }
 
 model Product {
-  id                 Int               @id @default(autoincrement())
-  uuid               String            @unique @default(uuid())
-  categoryId         Int               @map("category_id")
-  category           Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  brandId            Int?              @map("brand_id")
-  brand              Brand?            @relation(fields: [brandId], references: [id], onDelete: SetNull)
-  productConditionId Int?              @map("product_condition_id")
-  productCondition   ProductCondition? @relation(fields: [productConditionId], references: [id], onDelete: SetNull)
-  taxRateId          Int?              @map("tax_rate_id")
-  taxRate            TaxRate?          @relation(fields: [taxRateId], references: [id], onDelete: SetNull)
-  title              String
-  slug               String
-  sku                String?
-  mpn                String?
-  gtin               String?           @db.VarChar(14)
-  upc                String?           @db.VarChar(12)
-  shortDescription   String?           @map("short_description")
-  description        String?
-  specsSummary       Json?             @map("specs_summary")
-  warrantyMonths     Int?              @map("warranty_months")
-  allowCustomization Boolean           @default(false) @map("allow_customization")
-  customizationInstructions String?    @map("customization_instructions")
-  isReturnable       Boolean           @default(true) @map("is_returnable")
-  returnableDays     Int               @default(30) @map("returnable_days")
-  status             ProductStatus     @default(DRAFT)
-  isFeatured         Boolean           @default(false) @map("is_featured")
-  isTopProduct       Boolean           @default(false) @map("is_top_product")
-  isIndexable        Boolean           @default(true) @map("is_indexable")
-  metaTitle          String?           @map("meta_title")
-  metaDescription    String?           @map("meta_description")
-  deletedAt          DateTime?         @map("deleted_at")
-  createdAt          DateTime          @default(now()) @map("created_at")
-  updatedAt          DateTime          @updatedAt @map("updated_at")
+  id                        Int               @id @default(autoincrement())
+  uuid                      String            @unique @default(uuid())
+  categoryId                Int               @map("category_id")
+  category                  Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  brandId                   Int?              @map("brand_id")
+  brand                     Brand?            @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  supplierId                Int?              @map("supplier_id")
+  supplier                  Supplier?         @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  productConditionId        Int?              @map("product_condition_id")
+  productCondition          ProductCondition? @relation(fields: [productConditionId], references: [id], onDelete: SetNull)
+  taxRateId                 Int?              @map("tax_rate_id")
+  taxRate                   TaxRate?          @relation(fields: [taxRateId], references: [id], onDelete: SetNull)
+  title                     String
+  slug                      String
+  sku                       String?
+  mpn                       String?
+  gtin                      String?           @db.VarChar(14)
+  upc                       String?           @db.VarChar(12)
+  shortDescription          String?           @map("short_description")
+  description               String?
+  specsSummary              Json?             @map("specs_summary")
+  warrantyMonths            Int?              @map("warranty_months")
+  allowCustomization        Boolean           @default(false) @map("allow_customization")
+  customizationInstructions String?           @map("customization_instructions")
+  costPrice                 Decimal?          @map("cost_price") @db.Decimal(10, 2)
+  minimumOrderQuantity      Int               @default(1) @map("minimum_order_quantity")
+  stockLocation             String?           @map("stock_location")
+  receiveLowStockAlert      Boolean           @default(false) @map("receive_low_stock_alert")
+  outOfStockBehavior        String            @default("DENY") @map("out_of_stock_behavior")
+  inStockLabel              String?           @map("in_stock_label")
+  outOfStockLabel           String?           @map("out_of_stock_label")
+  availabilityDate          DateTime?         @map("availability_date") @db.Date
+  deliveryTimeMode          String            @default("DEFAULT") @map("delivery_time_mode")
+  inStockDeliveryTime       String?           @map("in_stock_delivery_time")
+  outOfStockDeliveryTime    String?           @map("out_of_stock_delivery_time")
+  additionalShippingCost    Decimal           @default(0) @map("additional_shipping_cost") @db.Decimal(10, 2)
+  isReturnable              Boolean           @default(true) @map("is_returnable")
+  returnableDays            Int               @default(30) @map("returnable_days")
+  status                    ProductStatus     @default(DRAFT)
+  isFeatured                Boolean           @default(false) @map("is_featured")
+  isTopProduct              Boolean           @default(false) @map("is_top_product")
+  isIndexable               Boolean           @default(true) @map("is_indexable")
+  metaTitle                 String?           @map("meta_title")
+  metaDescription           String?           @map("meta_description")
+  seoTags                   String[]          @default([]) @map("seo_tags")
+  offlineRedirectBehavior   String            @default("NOT_FOUND") @map("offline_redirect_behavior")
+  redirectTargetCategoryId  Int?              @map("redirect_target_category_id")
+  deletedAt                 DateTime?         @map("deleted_at")
+  createdAt                 DateTime          @default(now()) @map("created_at")
+  updatedAt                 DateTime          @updatedAt @map("updated_at")
 
   variants               ProductVariant[]
   secondaryCategories    CategoryProduct[]
-  relatedProducts        ProductRelated[] @relation("ProductRelatedSource")
-  relatedTo              ProductRelated[] @relation("ProductRelatedTarget")
+  relatedProducts        ProductRelated[]         @relation("ProductRelatedSource")
+  relatedTo              ProductRelated[]         @relation("ProductRelatedTarget")
   faqs                   ProductFaq[]
   collections            CollectionProduct[]
   browsingHistory        BrowsingHistory[]
@@ -354,9 +403,11 @@ model Product {
   banners                Banner[]
   featuredSectionEntries FeaturedSectionProduct[]
   trendingEntries        TrendingProduct[]
+  shippingMethods        ProductShippingMethod[]
 
   @@index([categoryId])
   @@index([brandId])
+  @@index([supplierId])
   @@index([productConditionId])
   @@index([taxRateId])
   @@index([status])
@@ -610,8 +661,20 @@ model ShippingMethod {
 
   rateBands ShippingRateBand[]
   orders    Order[]
+  products  ProductShippingMethod[]
 
   @@map("shipping_methods")
+}
+
+model ProductShippingMethod {
+  productId        Int            @map("product_id")
+  shippingMethodId Int            @map("shipping_method_id")
+  product          Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  shippingMethod   ShippingMethod @relation(fields: [shippingMethodId], references: [id], onDelete: Cascade)
+
+  @@id([productId, shippingMethodId])
+  @@index([shippingMethodId])
+  @@map("product_shipping_methods")
 }
 
 model ShippingRateBand {
@@ -683,6 +746,7 @@ model Order {
   statusHistory        OrderStatusHistory[]
   reviews              Review[]
   paymentTransactions  PaymentTransaction[]
+  paymentAttempts      PaymentAttempt[]
   paymentRefunds       PaymentRefund[]
   paymentDisputes      PaymentDispute[]
   couponLine           OrderCouponLine?
@@ -796,6 +860,71 @@ enum PaymentTxnStatus {
   FAILED
 }
 
+enum PaymentProvider {
+  STRIPE
+  PAYPAL
+  TWOCHECKOUT
+}
+
+enum PaymentAttemptStatus {
+  CREATED
+  REQUIRES_CUSTOMER_ACTION
+  PROCESSING
+  AUTHORIZED
+  CAPTURED
+  DECLINED
+  FAILED
+  CANCELLED
+  EXPIRED
+  UNKNOWN
+}
+
+model PaymentAttempt {
+  id               Int                  @id @default(autoincrement())
+  uuid             String               @unique @default(uuid())
+  orderId          Int                  @map("order_id")
+  order            Order                @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  provider         PaymentProvider
+  providerObjectId String?              @map("provider_object_id")
+  idempotencyKey   String               @map("idempotency_key")
+  status           PaymentAttemptStatus @default(CREATED)
+  amount           Decimal              @db.Decimal(10, 2)
+  currency         String               @default("GBP")
+  captureMode      String               @default("AUTOMATIC") @map("capture_mode")
+  redirectUrl      String?              @map("redirect_url")
+  failureCategory  String?              @map("failure_category")
+  failureCode      String?              @map("failure_code")
+  failureMessage   String?              @map("failure_message")
+  retryable        Boolean              @default(false)
+  expiresAt        DateTime?            @map("expires_at")
+  createdAt        DateTime             @default(now()) @map("created_at")
+  updatedAt        DateTime             @updatedAt @map("updated_at")
+
+  transactions PaymentTransaction[]
+  history      PaymentStateHistory[]
+
+  @@unique([provider, idempotencyKey])
+  @@unique([provider, providerObjectId])
+  @@index([orderId, createdAt])
+  @@index([status, createdAt])
+  @@map("payment_attempts")
+}
+
+model PaymentStateHistory {
+  id               Int                   @id @default(autoincrement())
+  paymentAttemptId Int                   @map("payment_attempt_id")
+  paymentAttempt   PaymentAttempt        @relation(fields: [paymentAttemptId], references: [id], onDelete: Cascade)
+  fromStatus       PaymentAttemptStatus? @map("from_status")
+  toStatus         PaymentAttemptStatus  @map("to_status")
+  source           String
+  reason           String?
+  metadata         Json?
+  createdAt        DateTime              @default(now()) @map("created_at")
+
+  @@index([paymentAttemptId, createdAt])
+  @@map("payment_state_history")
+}
+
 enum RefundStatus {
   PENDING
   PROCESSED
@@ -815,6 +944,8 @@ model PaymentTransaction {
   uuid                  String           @unique @default(uuid())
   orderId               Int              @map("order_id")
   order                 Order            @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  paymentAttemptId      Int?             @map("payment_attempt_id")
+  paymentAttempt        PaymentAttempt?  @relation(fields: [paymentAttemptId], references: [id], onDelete: SetNull)
   userId                Int?             @map("user_id")
   provider              String
   providerTransactionId String           @unique @map("provider_transaction_id")
@@ -829,6 +960,7 @@ model PaymentTransaction {
   disputes PaymentDispute[]
 
   @@index([orderId])
+  @@index([paymentAttemptId])
   @@map("payment_transactions")
 }
 
@@ -887,6 +1019,7 @@ model PaymentWebhookLog {
 enum DiscountType {
   FIXED
   PERCENT
+  FREE_SHIPPING
 }
 
 enum BannerLinkType {
@@ -910,26 +1043,50 @@ enum MenuLocation {
 }
 
 model Coupon {
-  id                Int          @id @default(autoincrement())
+  id                Int           @id @default(autoincrement())
   code              String
+  name              String
   description       String?
-  discountType      DiscountType @map("discount_type")
-  discountAmount    Decimal      @map("discount_amount") @db.Decimal(10, 2)
-  appliesToShipping Boolean      @default(false) @map("applies_to_shipping")
-  minOrderTotal     Decimal?     @map("min_order_total") @db.Decimal(10, 2)
-  maxDiscountValue  Decimal?     @map("max_discount_value") @db.Decimal(10, 2)
-  startsAt          DateTime?    @map("starts_at")
-  endsAt            DateTime?    @map("ends_at")
-  maxTotalUsage     Int?         @map("max_total_usage")
-  maxUsagePerUser   Int?         @map("max_usage_per_user")
-  usageCount        Int          @default(0) @map("usage_count")
-  deletedAt         DateTime?    @map("deleted_at")
-  createdAt         DateTime     @default(now()) @map("created_at")
-  updatedAt         DateTime     @updatedAt @map("updated_at")
+  discountType      DiscountType  @map("discount_type")
+  discountAmount    Decimal       @map("discount_amount") @db.Decimal(10, 2)
+  appliesToShipping Boolean       @default(false) @map("applies_to_shipping")
+  minOrderTotal     Decimal?      @map("min_order_total") @db.Decimal(10, 2)
+  maxDiscountValue  Decimal?      @map("max_discount_value") @db.Decimal(10, 2)
+  startsAt          DateTime?     @map("starts_at")
+  endsAt            DateTime?     @map("ends_at")
+  maxTotalUsage     Int?          @map("max_total_usage")
+  maxUsagePerUser   Int?          @map("max_usage_per_user")
+  usageCount        Int           @default(0) @map("usage_count")
+  targetType        String        @default("ALL") @map("target_type")
+  targetIds         Int[]         @default([]) @map("target_ids")
+  excludeSaleItems  Boolean       @default(true) @map("exclude_sale_items")
+  status            CatalogStatus @default(ACTIVE)
+  deletedAt         DateTime?     @map("deleted_at")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
 
   orderLines OrderCouponLine[]
 
   @@map("coupons")
+}
+
+model AutomaticDiscount {
+  id             Int           @id @default(autoincrement())
+  name           String
+  description    String?
+  discountType   DiscountType  @map("discount_type")
+  discountAmount Decimal       @map("discount_amount") @db.Decimal(10, 2)
+  targetType     String        @map("target_type")
+  targetIds      Int[]         @default([]) @map("target_ids")
+  startsAt       DateTime?     @map("starts_at")
+  endsAt         DateTime?     @map("ends_at")
+  showSaleBadge  Boolean       @default(true) @map("show_sale_badge")
+  status         CatalogStatus @default(ACTIVE)
+  deletedAt      DateTime?     @map("deleted_at")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  @@map("automatic_discounts")
 }
 
 model OrderCouponLine {

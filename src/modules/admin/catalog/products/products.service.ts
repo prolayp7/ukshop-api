@@ -22,6 +22,7 @@ const productDetailInclude = {
   taxRate: true,
   secondaryCategories: { include: { category: true } },
   relatedProducts: { include: { relatedProduct: true } },
+  shippingMethods: { include: { shippingMethod: true } },
   faqs: { orderBy: { sortOrder: 'asc' as const } },
   variants: {
     where: { deletedAt: null },
@@ -136,7 +137,7 @@ export class ProductsService {
   }
 
   private productData(dto: CreateProductDto | UpdateProductDto) {
-    const { secondaryCategoryIds: _secondaryCategoryIds, relatedProductIds: _relatedProductIds, specsSummary, ...fields } = dto;
+    const { secondaryCategoryIds: _secondaryCategoryIds, relatedProductIds: _relatedProductIds, shippingMethodIds: _shippingMethodIds, initialVariant: _initialVariant, specsSummary, ...fields } = dto;
     return {
       ...fields,
       ...(specsSummary !== undefined
@@ -151,6 +152,24 @@ export class ProductsService {
       const product = await tx.product.create({
         data: this.productData(dto) as Prisma.ProductUncheckedCreateInput,
       });
+      if (dto.initialVariant) {
+        await tx.productVariant.create({
+          data: {
+            productId: product.id,
+            title: 'Default',
+            slug: 'default',
+            price: dto.initialVariant.price,
+            salePrice: dto.initialVariant.salePrice,
+            stockQty: dto.initialVariant.stockQty,
+            lowStockThreshold: dto.initialVariant.lowStockThreshold ?? 5,
+            weightKg: dto.initialVariant.weightKg,
+            widthCm: dto.initialVariant.widthCm,
+            heightCm: dto.initialVariant.heightCm,
+            lengthCm: dto.initialVariant.lengthCm,
+            isDefault: true,
+          },
+        });
+      }
       if (dto.secondaryCategoryIds?.length) {
         await tx.categoryProduct.createMany({
           data: dto.secondaryCategoryIds.map((categoryId) => ({ productId: product.id, categoryId })),
@@ -160,6 +179,9 @@ export class ProductsService {
         await tx.productRelated.createMany({
           data: dto.relatedProductIds.map((relatedProductId) => ({ productId: product.id, relatedProductId })),
         });
+      }
+      if (dto.shippingMethodIds?.length) {
+        await tx.productShippingMethod.createMany({ data: dto.shippingMethodIds.map((shippingMethodId) => ({ productId: product.id, shippingMethodId })) });
       }
       return tx.product.findUniqueOrThrow({ where: { id: product.id }, include: productDetailInclude });
     }).catch((error: unknown) => this.mapRelationError(error));
@@ -173,6 +195,30 @@ export class ProductsService {
         where: { id },
         data: this.productData(dto) as Prisma.ProductUncheckedUpdateInput,
       });
+      if (dto.initialVariant !== undefined) {
+        const variant = await tx.productVariant.findFirst({
+          where: { productId: id, deletedAt: null },
+          orderBy: [{ isDefault: 'desc' }, { id: 'asc' }],
+          select: { id: true },
+        });
+        const variantData = {
+          price: dto.initialVariant.price,
+          salePrice: dto.initialVariant.salePrice ?? null,
+          stockQty: dto.initialVariant.stockQty,
+          lowStockThreshold: dto.initialVariant.lowStockThreshold ?? 5,
+          weightKg: dto.initialVariant.weightKg,
+          widthCm: dto.initialVariant.widthCm,
+          heightCm: dto.initialVariant.heightCm,
+          lengthCm: dto.initialVariant.lengthCm,
+        };
+        if (variant) {
+          await tx.productVariant.update({ where: { id: variant.id }, data: variantData });
+        } else {
+          await tx.productVariant.create({
+            data: { productId: id, title: 'Default', slug: 'default', isDefault: true, ...variantData },
+          });
+        }
+      }
       if (dto.secondaryCategoryIds !== undefined) {
         await tx.categoryProduct.deleteMany({ where: { productId: id } });
         if (dto.secondaryCategoryIds.length) {
@@ -190,6 +236,12 @@ export class ProductsService {
           await tx.productRelated.createMany({
             data: dto.relatedProductIds.map((relatedProductId) => ({ productId: id, relatedProductId })),
           });
+        }
+      }
+      if (dto.shippingMethodIds !== undefined) {
+        await tx.productShippingMethod.deleteMany({ where: { productId: id } });
+        if (dto.shippingMethodIds.length) {
+          await tx.productShippingMethod.createMany({ data: dto.shippingMethodIds.map((shippingMethodId) => ({ productId: id, shippingMethodId })) });
         }
       }
       return tx.product.findUniqueOrThrow({ where: { id }, include: productDetailInclude });
@@ -214,6 +266,7 @@ export class ProductsService {
         data: {
           categoryId: source.categoryId,
           brandId: source.brandId,
+          supplierId: source.supplierId,
           productConditionId: source.productConditionId,
           taxRateId: source.taxRateId,
           title: `${source.title} (copy)`,
@@ -230,6 +283,18 @@ export class ProductsService {
           warrantyMonths: source.warrantyMonths,
           allowCustomization: source.allowCustomization,
           customizationInstructions: source.customizationInstructions,
+          costPrice: source.costPrice,
+          minimumOrderQuantity: source.minimumOrderQuantity,
+          stockLocation: source.stockLocation,
+          receiveLowStockAlert: source.receiveLowStockAlert,
+          outOfStockBehavior: source.outOfStockBehavior,
+          inStockLabel: source.inStockLabel,
+          outOfStockLabel: source.outOfStockLabel,
+          availabilityDate: source.availabilityDate,
+          deliveryTimeMode: source.deliveryTimeMode,
+          inStockDeliveryTime: source.inStockDeliveryTime,
+          outOfStockDeliveryTime: source.outOfStockDeliveryTime,
+          additionalShippingCost: source.additionalShippingCost,
           isReturnable: source.isReturnable,
           returnableDays: source.returnableDays,
           status: 'DRAFT',
@@ -238,6 +303,9 @@ export class ProductsService {
           isIndexable: source.isIndexable,
           metaTitle: source.metaTitle,
           metaDescription: source.metaDescription,
+          seoTags: source.seoTags,
+          offlineRedirectBehavior: source.offlineRedirectBehavior,
+          redirectTargetCategoryId: source.redirectTargetCategoryId,
         },
       });
 
@@ -258,6 +326,12 @@ export class ProductsService {
             answer,
             sortOrder,
           })),
+        });
+      }
+
+      if (source.shippingMethods.length) {
+        await tx.productShippingMethod.createMany({
+          data: source.shippingMethods.map(({ shippingMethodId }) => ({ productId: product.id, shippingMethodId })),
         });
       }
 

@@ -15,6 +15,7 @@ const STATUS_CODE_MAP: Record<number, string> = {
   422: 'UNPROCESSABLE',
   429: 'RATE_LIMITED',
   500: 'INTERNAL_ERROR',
+  503: 'PAYMENT_PROVIDER_UNAVAILABLE',
 };
 
 @Catch()

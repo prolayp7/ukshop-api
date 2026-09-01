@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { seedProducts } from './seed-products';
 
 const prisma = new PrismaClient();
 
@@ -120,7 +121,9 @@ async function main() {
   // reused - see the schema_review_fixes migration), so it can't be used in an
   // `upsert`/`findUnique` where-clause. Fall back to findFirst + conditional create.
   const findOrCreateCategory = (where: { slug: string }, create: Parameters<typeof prisma.category.create>[0]['data']) =>
-    prisma.category.findFirst({ where }).then((existing) => existing ?? prisma.category.create({ data: create }));
+    prisma.category.findFirst({ where: { ...where, deletedAt: null } }).then((existing) =>
+      existing ?? prisma.category.create({ data: create }),
+    );
 
   const pcComponents = await findOrCreateCategory(
     { slug: 'pc-components' },
@@ -134,6 +137,30 @@ async function main() {
     { slug: 'graphics-cards' },
     { title: 'Graphics Cards', slug: 'graphics-cards', parentId: pcComponents.id, sortOrder: 2 },
   );
+  await findOrCreateCategory(
+    { slug: 'motherboards' },
+    { title: 'Motherboards', slug: 'motherboards', parentId: pcComponents.id, sortOrder: 3 },
+  );
+  await findOrCreateCategory(
+    { slug: 'memory-ram' },
+    { title: 'Memory / RAM', slug: 'memory-ram', parentId: pcComponents.id, sortOrder: 4 },
+  );
+  await findOrCreateCategory(
+    { slug: 'storage' },
+    { title: 'Storage', slug: 'storage', parentId: pcComponents.id, sortOrder: 5 },
+  );
+  await findOrCreateCategory(
+    { slug: 'pc-cases' },
+    { title: 'PC Cases', slug: 'pc-cases', parentId: pcComponents.id, sortOrder: 6 },
+  );
+  await findOrCreateCategory(
+    { slug: 'power-supplies' },
+    { title: 'Power Supplies', slug: 'power-supplies', parentId: pcComponents.id, sortOrder: 7 },
+  );
+  await findOrCreateCategory(
+    { slug: 'cooling' },
+    { title: 'Cooling', slug: 'cooling', parentId: pcComponents.id, sortOrder: 8 },
+  );
 
   const computers = await findOrCreateCategory(
     { slug: 'computers' },
@@ -142,6 +169,18 @@ async function main() {
   await findOrCreateCategory(
     { slug: 'gaming-pcs' },
     { title: 'Gaming PCs', slug: 'gaming-pcs', parentId: computers.id, sortOrder: 1 },
+  );
+  await findOrCreateCategory(
+    { slug: 'desktop-pcs' },
+    { title: 'Desktop PCs', slug: 'desktop-pcs', parentId: computers.id, sortOrder: 2 },
+  );
+  await findOrCreateCategory(
+    { slug: 'workstations' },
+    { title: 'Workstations', slug: 'workstations', parentId: computers.id, sortOrder: 3 },
+  );
+  await findOrCreateCategory(
+    { slug: 'mini-pcs' },
+    { title: 'Mini PCs', slug: 'mini-pcs', parentId: computers.id, sortOrder: 4 },
   );
 
   const laptops = await findOrCreateCategory(
@@ -152,6 +191,14 @@ async function main() {
     { slug: 'gaming-laptops' },
     { title: 'Gaming Laptops', slug: 'gaming-laptops', parentId: laptops.id, sortOrder: 1 },
   );
+  await findOrCreateCategory(
+    { slug: 'business-laptops' },
+    { title: 'Business Laptops', slug: 'business-laptops', parentId: laptops.id, sortOrder: 2 },
+  );
+  await findOrCreateCategory(
+    { slug: 'ultrabooks' },
+    { title: 'Ultrabooks', slug: 'ultrabooks', parentId: laptops.id, sortOrder: 3 },
+  );
 
   const peripherals = await findOrCreateCategory(
     { slug: 'peripherals' },
@@ -161,17 +208,95 @@ async function main() {
     { slug: 'monitors' },
     { title: 'Monitors', slug: 'monitors', parentId: peripherals.id, sortOrder: 1 },
   );
+  await findOrCreateCategory(
+    { slug: 'keyboards' },
+    { title: 'Keyboards', slug: 'keyboards', parentId: peripherals.id, sortOrder: 2 },
+  );
+  await findOrCreateCategory(
+    { slug: 'mice' },
+    { title: 'Mice', slug: 'mice', parentId: peripherals.id, sortOrder: 3 },
+  );
+  await findOrCreateCategory(
+    { slug: 'headsets' },
+    { title: 'Headsets', slug: 'headsets', parentId: peripherals.id, sortOrder: 4 },
+  );
+  await findOrCreateCategory(
+    { slug: 'webcams' },
+    { title: 'Webcams', slug: 'webcams', parentId: peripherals.id, sortOrder: 5 },
+  );
+
+  const networking = await findOrCreateCategory(
+    { slug: 'networking' },
+    { title: 'Networking', slug: 'networking', sortOrder: 5 },
+  );
+  for (const [title, slug, sortOrder] of [
+    ['Routers', 'routers', 1],
+    ['Network Switches', 'network-switches', 2],
+    ['Wireless Adapters', 'wireless-adapters', 3],
+  ] as const) {
+    await findOrCreateCategory({ slug }, { title, slug, parentId: networking.id, sortOrder });
+  }
+
+  const software = await findOrCreateCategory(
+    { slug: 'software' },
+    { title: 'Software', slug: 'software', sortOrder: 6 },
+  );
+  await findOrCreateCategory(
+    { slug: 'operating-systems' },
+    { title: 'Operating Systems', slug: 'operating-systems', parentId: software.id, sortOrder: 1 },
+  );
+  await findOrCreateCategory(
+    { slug: 'security-software' },
+    { title: 'Security Software', slug: 'security-software', parentId: software.id, sortOrder: 2 },
+  );
 
   // Brands
-  for (const title of ['AMD', 'NVIDIA', 'Intel', 'ASUS']) {
+  for (const title of [
+    'AMD',
+    'NVIDIA',
+    'Intel',
+    'ASUS',
+    'Acer',
+    'Apple',
+    'Corsair',
+    'Crucial',
+    'Dell',
+    'Gigabyte',
+    'HP',
+    'Kingston',
+    'Lenovo',
+    'Logitech',
+    'MSI',
+    'NZXT',
+    'Razer',
+    'Samsung',
+    'Seagate',
+    'Western Digital',
+  ]) {
     await prisma.brand.upsert({
-      where: { slug: title.toLowerCase() },
-      update: {},
-      create: { title, slug: title.toLowerCase() },
+      where: { slug: title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') },
+      update: { title, status: 'ACTIVE' },
+      create: { title, slug: title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') },
     });
   }
 
-  // Demo product + variant (for local frontend development against a non-empty catalog)
+  // Suppliers
+  const suppliers = [
+    { title: 'TD SYNNEX UK', slug: 'td-synnex-uk', description: 'UK technology distributor for hardware, software, and cloud products.' },
+    { title: 'Ingram Micro UK', slug: 'ingram-micro-uk', description: 'Technology product and supply-chain distributor.' },
+    { title: 'Exertis UK', slug: 'exertis-uk', description: 'UK distributor for computing, components, and consumer technology.' },
+    { title: 'CMS Distribution', slug: 'cms-distribution', description: 'Specialist distributor for business and consumer technologies.' },
+    { title: 'Westcoast', slug: 'westcoast', description: 'UK distributor for computing hardware, software, and services.' },
+  ];
+  for (const supplier of suppliers) {
+    await prisma.supplier.upsert({
+      where: { slug: supplier.slug },
+      update: { title: supplier.title, description: supplier.description, status: 'ACTIVE' },
+      create: supplier,
+    });
+  }
+
+  /* // Demo product + variant (superseded by the complete 620-product catalogue seed)
   // Product.slug and ProductVariant.slug are likewise no longer `@unique` (same partial-index
   // reasoning as Category.slug above), so use findFirst-or-create here too.
   const graphicsCards = await prisma.category.findFirstOrThrow({ where: { slug: 'graphics-cards' } });
@@ -206,6 +331,13 @@ async function main() {
       },
     });
   }
+  */
+
+  const productSeedResult = await seedProducts(prisma);
+  console.log(
+    `Product catalogue: ${productSeedResult.products} products across ${productSeedResult.categories} categories ` +
+      `(${productSeedResult.created} created, ${productSeedResult.updated} updated).`,
+  );
 
   // Settings
   await prisma.setting.upsert({
