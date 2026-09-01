@@ -1,14 +1,16 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsInt, IsOptional, IsPositive, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class CreateReviewDto {
   @Type(() => Number)
   @IsInt()
+  @IsPositive()
   productId: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsInt()
+  @IsPositive()
   orderItemId?: number;
 
   @Type(() => Number)

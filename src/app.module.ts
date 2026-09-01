@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { PrismaModule } from './prisma/prisma.module';
 import { AdminCoreModule } from './common/admin/admin-core.module';
@@ -43,6 +45,18 @@ import { StorefrontReviewsModule } from './modules/storefront/reviews/reviews.mo
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        throttlers: [
+          {
+            ttl: config.get<number>('THROTTLE_TTL_MS', 60_000),
+            limit: config.get<number>('THROTTLE_LIMIT', 120),
+          },
+        ],
+      }),
+    }),
     PrismaModule,
     AdminCoreModule,
     AdminAuthModule,
@@ -83,5 +97,6 @@ import { StorefrontReviewsModule } from './modules/storefront/reviews/reviews.mo
     PaymentsModule,
   ],
   controllers: [AppController],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

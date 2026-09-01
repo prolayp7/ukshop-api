@@ -1,8 +1,9 @@
 import { Type } from 'class-transformer';
-import { IsInt } from 'class-validator';
+import { IsInt, IsPositive } from 'class-validator';
 
 export class AddWishlistItemDto {
   @Type(() => Number)
   @IsInt()
+  @IsPositive()
   productVariantId: number;
 }
