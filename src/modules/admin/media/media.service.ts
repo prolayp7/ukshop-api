@@ -50,6 +50,15 @@ const extensionByType: Record<string, string> = { 'image/jpeg': '.jpg', 'image/p
     if (!file) throw new BadRequestException('Image file is required');
     let target: string | undefined;
     try {
+      if ((dto.ownerType === 'PRODUCT' && dto.collection === 'products') || (dto.ownerType === 'LIBRARY' && dto.collection.startsWith('branding-'))) {
+        const allowedProductImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+        if (!allowedProductImageTypes.has(file.mimetype)) {
+          throw new BadRequestException('Images must be JPG, PNG or WebP files');
+        }
+        if (file.size > 2 * 1024 * 1024) {
+          throw new BadRequestException('Images must be 2 MB or smaller');
+        }
+      }
       const extension = extensionByType[file.mimetype]; if (!extension) throw new BadRequestException('Unsupported file type');
       await this.assertOwner(dto.ownerType, dto.ownerId);
       const isImage = file.mimetype.startsWith('image/');

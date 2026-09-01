@@ -63,12 +63,49 @@ function upcFor(sequence: number): string {
 export function validateProductBlueprints(expectedCategories = 31, productsPerCategory = 20) {
   const slugs = Object.keys(BLUEPRINTS);
   if (slugs.length !== expectedCategories) throw new Error(`Expected ${expectedCategories} product blueprints, found ${slugs.length}.`);
+  const productSlugs = new Set<string>();
+  const skus = new Set<string>();
+  const upcs = new Set<string>();
+  let sequence = 1;
+  let standardProducts = 0;
+  let variableProducts = 0;
+  let variants = 0;
   for (const [slug, blueprint] of Object.entries(BLUEPRINTS)) {
     const count = blueprint.models.length * blueprint.configurations.length;
     if (count !== productsPerCategory) throw new Error(`${slug} generates ${count} products instead of ${productsPerCategory}.`);
     if (blueprint.features.length < 4) throw new Error(`${slug} needs at least four product features.`);
+    for (let modelIndex = 0; modelIndex < blueprint.models.length; modelIndex += 1) {
+      for (let configIndex = 0; configIndex < blueprint.configurations.length; configIndex += 1) {
+        const isVariable = (modelIndex * blueprint.configurations.length + configIndex) % 2 === 1;
+        const brandSlug = blueprint.brands[(modelIndex + configIndex) % blueprint.brands.length];
+        const productSlug = `${slug}-${slugify(`${brandSlug} ${blueprint.models[modelIndex]} ${blueprint.configurations[configIndex]}`)}`;
+        const sku = `UKS-${slug.slice(0, 4).toUpperCase()}-${String(sequence).padStart(4, '0')}`;
+        const upc = upcFor(sequence);
+        if (productSlugs.has(productSlug)) throw new Error(`Duplicate generated product slug: ${productSlug}`);
+        if (skus.has(sku)) throw new Error(`Duplicate generated SKU: ${sku}`);
+        if (upcs.has(upc)) throw new Error(`Duplicate generated UPC: ${upc}`);
+        productSlugs.add(productSlug);
+        skus.add(sku);
+        upcs.add(upc);
+        if (isVariable) {
+          variableProducts += 1;
+          variants += blueprint.configurations.length;
+        } else {
+          standardProducts += 1;
+          variants += 1;
+        }
+        sequence += 1;
+      }
+    }
   }
-  return { categories: slugs.length, products: slugs.length * productsPerCategory };
+  const products = slugs.length * productsPerCategory;
+  if (productSlugs.size !== products || skus.size !== products || upcs.size !== products) {
+    throw new Error('Generated product identifiers are incomplete.');
+  }
+  if (standardProducts !== products / 2 || variableProducts !== products / 2 || variants !== 1550) {
+    throw new Error(`Expected 310 standard products, 310 variable products and 1550 variants; generated ${standardProducts}, ${variableProducts} and ${variants}.`);
+  }
+  return { categories: slugs.length, products, standardProducts, variableProducts, variants, seoRecords: products };
 }
 
 export async function seedProducts(prisma: PrismaClient) {
@@ -89,6 +126,12 @@ export async function seedProducts(prisma: PrismaClient) {
   const missing = Object.keys(BLUEPRINTS).filter((slug) => !categoryBySlug.has(slug));
   if (missing.length) throw new Error(`Missing active categories required by product seed: ${missing.join(', ')}`);
   if (suppliers.length === 0) throw new Error('At least one active supplier is required before seeding products.');
+  const configurationAttribute = await prisma.productAttribute.findFirst({
+    where: { slug: 'configuration', deletedAt: null },
+  }).then((existing) => existing ?? prisma.productAttribute.create({
+    data: { title: 'Configuration', slug: 'configuration', inputType: 'SELECT', isFilterable: true },
+  }));
+  const shippingMethods = await prisma.shippingMethod.findMany({ where: { status: 'ACTIVE' }, select: { id: true } });
 
   let sequence = 1;
   let created = 0;
@@ -97,6 +140,7 @@ export async function seedProducts(prisma: PrismaClient) {
     const category = categoryBySlug.get(categorySlug)!;
     for (let modelIndex = 0; modelIndex < blueprint.models.length; modelIndex += 1) {
       for (let configIndex = 0; configIndex < blueprint.configurations.length; configIndex += 1) {
+        const isVariable = (modelIndex * blueprint.configurations.length + configIndex) % 2 === 1;
         const brandSlug = blueprint.brands[(modelIndex + configIndex) % blueprint.brands.length];
         const brand = brandBySlug.get(brandSlug);
         if (!brand) throw new Error(`Missing brand ${brandSlug} required by ${categorySlug}.`);
@@ -117,7 +161,7 @@ export async function seedProducts(prisma: PrismaClient) {
         const data: Prisma.ProductUncheckedCreateInput = {
           categoryId: category.id, brandId: brand.id, supplierId: supplier.id, productConditionId: condition.id, taxRateId: taxRate.id,
           title, slug, sku, mpn, gtin: `00${upc}`, upc, shortDescription, description,
-          specsSummary: { category: category.title, productType: blueprint.noun, brand: brand.title, model, configuration, keyFeatures: blueprint.features, warranty: `${blueprint.warrantyMonths} months`, condition: 'New', countryOfSale: 'United Kingdom' },
+          specsSummary: { category: category.title, catalogueType: isVariable ? 'Variable product' : 'Standard product', productType: blueprint.noun, brand: brand.title, model, configuration, availableConfigurations: isVariable ? blueprint.configurations : [configuration], keyFeatures: blueprint.features, warranty: `${blueprint.warrantyMonths} months`, condition: 'New', countryOfSale: 'United Kingdom' },
           warrantyMonths: blueprint.warrantyMonths,
           allowCustomization: ['computers', 'gaming-pcs', 'desktop-pcs', 'workstations'].includes(categorySlug),
           customizationInstructions: ['computers', 'gaming-pcs', 'desktop-pcs', 'workstations'].includes(categorySlug) ? 'Contact support before dispatch to discuss compatible memory and storage upgrades.' : null,
@@ -133,17 +177,57 @@ export async function seedProducts(prisma: PrismaClient) {
         const product = existing
           ? await prisma.product.update({ where: { id: existing.id }, data })
           : await prisma.product.create({ data });
+        await prisma.$executeRaw`UPDATE products SET product_type = CAST(${isVariable ? 'VARIABLE' : 'STANDARD'} AS "ProductType") WHERE id = ${product.id}`;
         existing ? updated += 1 : created += 1;
 
-        const variantSlug = `${slug}-default`;
-        const variantData = {
-          productId: product.id, title: configuration, slug: variantSlug, barcode: upc, price: retailPrice, salePrice,
-          stockQty: 8 + (sequence * 7) % 43, lowStockThreshold: 5, weightKg: blueprint.weightKg,
-          lengthCm: blueprint.dimensions[0], widthCm: blueprint.dimensions[1], heightCm: blueprint.dimensions[2], isDefault: true, status: 'ACTIVE' as const, deletedAt: null,
-        };
-        const existingVariant = await prisma.productVariant.findFirst({ where: { slug: variantSlug, deletedAt: null }, select: { id: true } });
-        if (existingVariant) await prisma.productVariant.update({ where: { id: existingVariant.id }, data: variantData });
-        else await prisma.productVariant.create({ data: variantData });
+        const variantOptions = isVariable ? blueprint.configurations : ['Default'];
+        const desiredVariantSlugs = variantOptions.map((option) => isVariable ? `${slug}-option-${slugify(option)}` : `${slug}-default`);
+        await prisma.productVariant.updateMany({
+          where: { productId: product.id, slug: { startsWith: `${slug}-`, notIn: desiredVariantSlugs } },
+          data: { status: 'INACTIVE', deletedAt: new Date() },
+        });
+        for (let optionIndex = 0; optionIndex < variantOptions.length; optionIndex += 1) {
+          const option = variantOptions[optionIndex];
+          const variantSlug = desiredVariantSlugs[optionIndex];
+          const optionPrice = isVariable ? money(retailPrice + (optionIndex - configIndex) * blueprint.priceStep * 0.18) : retailPrice;
+          const safeOptionPrice = Math.max(0.99, optionPrice);
+          const optionSalePrice = salePrice === null ? null : money(safeOptionPrice * 0.9);
+          const variantData = {
+            productId: product.id, title: option, slug: variantSlug,
+            barcode: isVariable ? upcFor(10000 + sequence * 10 + optionIndex) : upc,
+            price: safeOptionPrice, salePrice: optionSalePrice,
+            stockQty: 8 + ((sequence + optionIndex) * 7) % 43, lowStockThreshold: 5, weightKg: blueprint.weightKg,
+            lengthCm: blueprint.dimensions[0], widthCm: blueprint.dimensions[1], heightCm: blueprint.dimensions[2],
+            isDefault: !isVariable || optionIndex === configIndex, status: 'ACTIVE' as const, deletedAt: null,
+          };
+          const existingVariant = await prisma.productVariant.findFirst({ where: { slug: variantSlug }, select: { id: true } });
+          const variant = existingVariant
+            ? await prisma.productVariant.update({ where: { id: existingVariant.id }, data: variantData })
+            : await prisma.productVariant.create({ data: variantData });
+          if (isVariable) {
+            const configurationValue = await prisma.productAttributeValue.upsert({
+              where: { attributeId_value: { attributeId: configurationAttribute.id, value: option } },
+              update: {},
+              create: { attributeId: configurationAttribute.id, value: option, sortOrder: optionIndex + 1 },
+            });
+            await prisma.productVariantAttribute.upsert({
+              where: { productVariantId_attributeId: { productVariantId: variant.id, attributeId: configurationAttribute.id } },
+              update: { attributeValueId: configurationValue.id },
+              create: { productVariantId: variant.id, attributeId: configurationAttribute.id, attributeValueId: configurationValue.id },
+            });
+          } else {
+            await prisma.productVariantAttribute.deleteMany({
+              where: { productVariantId: variant.id, attributeId: configurationAttribute.id },
+            });
+          }
+        }
+        for (const shippingMethod of shippingMethods) {
+          await prisma.productShippingMethod.upsert({
+            where: { productId_shippingMethodId: { productId: product.id, shippingMethodId: shippingMethod.id } },
+            update: {},
+            create: { productId: product.id, shippingMethodId: shippingMethod.id },
+          });
+        }
 
         const faqCount = await prisma.productFaq.count({ where: { productId: product.id } });
         if (faqCount === 0) {

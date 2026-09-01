@@ -28,6 +28,17 @@ import { NotificationsModule } from './modules/admin/notifications/notifications
 import { ReportsModule } from './modules/admin/reports/reports.module';
 import { MediaModule } from './modules/admin/media/media.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { StorefrontAuthModule } from './modules/storefront/auth/storefront-auth.module';
+import { StorefrontCategoriesModule } from './modules/storefront/catalog/categories/storefront-categories.module';
+import { StorefrontBrandsModule } from './modules/storefront/catalog/brands/storefront-brands.module';
+import { StorefrontProductsModule } from './modules/storefront/catalog/products/storefront-products.module';
+import { StorefrontAddressesModule } from './modules/storefront/addresses/storefront-addresses.module';
+import { StorefrontCouponsModule } from './modules/storefront/coupons/coupons.module';
+import { CartModule } from './modules/storefront/cart/cart.module';
+import { StorefrontShippingModule } from './modules/storefront/shipping/storefront-shipping.module';
+import { OrdersModule as StorefrontOrdersModule } from './modules/storefront/orders/orders.module';
+import { WishlistModule } from './modules/storefront/wishlist/wishlist.module';
+import { StorefrontReviewsModule } from './modules/storefront/reviews/reviews.module';
 
 @Module({
   imports: [
@@ -35,6 +46,17 @@ import { PaymentsModule } from './modules/payments/payments.module';
     PrismaModule,
     AdminCoreModule,
     AdminAuthModule,
+    StorefrontAuthModule,
+    StorefrontCategoriesModule,
+    StorefrontBrandsModule,
+    StorefrontProductsModule,
+    StorefrontAddressesModule,
+    StorefrontCouponsModule,
+    CartModule,
+    StorefrontShippingModule,
+    StorefrontOrdersModule,
+    WishlistModule,
+    StorefrontReviewsModule,
     CustomersModule,
     CategoriesModule,
     BrandsModule,

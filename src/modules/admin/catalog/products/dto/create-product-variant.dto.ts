@@ -39,7 +39,7 @@ export class CreateProductVariantDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  salePrice?: number;
+  salePrice?: number | null;
 
   @IsInt()
   @Min(0)
