@@ -1,11 +1,41 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma, ProductCompatibility } from '@prisma/client';
 import { PrismaService } from '../../../../prisma/prisma.service';
 import { buildPaginationMeta, paginationSkipTake } from '../../../../common/pagination';
 import { ListStorefrontProductsQueryDto } from './dto/list-storefront-products-query.dto';
+import { CompatibleProductsQueryDto } from './dto/compatible-products-query.dto';
+
+// Fixed hardware facts (which socket generation takes which memory type),
+// not merchant-editable content - kept as a constant rather than a DB table.
+const DDR5_SOCKETS = ['AM5', 'LGA1851'];
+const DDR4_SOCKETS = ['AM4'];
+function memoryTypeForSocket(socket: string): string | null {
+  if (DDR5_SOCKETS.includes(socket)) return 'DDR5';
+  if (DDR4_SOCKETS.includes(socket)) return 'DDR4';
+  return null;
+}
+
+function isCompatible(a: ProductCompatibility, b: ProductCompatibility): boolean {
+  if (a.socket && b.socket && a.socket !== b.socket) return false;
+  const socket = a.socket || b.socket;
+  if (socket) {
+    for (const side of [a, b]) {
+      if (side.compatibleSockets.length && !side.compatibleSockets.includes(socket)) return false;
+    }
+    const wantedMemType = memoryTypeForSocket(socket);
+    if (wantedMemType) {
+      for (const side of [a, b]) {
+        if (side.memoryType && side.memoryType !== wantedMemType) return false;
+      }
+    }
+  }
+  if (a.wattageRequired && b.wattageCapacity && b.wattageCapacity < a.wattageRequired) return false;
+  if (b.wattageRequired && a.wattageCapacity && a.wattageCapacity < b.wattageRequired) return false;
+  return true;
+}
 
 const listInclude = {
-  category: { select: { id: true, title: true, slug: true } },
+  category: { select: { id: true, title: true, slug: true, parent: { select: { id: true, title: true, slug: true } } } },
   brand: { select: { id: true, title: true, slug: true } },
   variants: {
     where: { deletedAt: null, status: 'ACTIVE' as const },
@@ -22,6 +52,11 @@ function pricingOf(variants: ListProduct['variants']) {
     price: primary?.price ?? null,
     salePrice: primary?.salePrice ?? null,
     inStock: variants.some((v) => v.stockQty > 0),
+    stockQty: variants.reduce((sum, v) => sum + v.stockQty, 0),
+    // the variant a storefront "add to cart" click should use when the
+    // caller hasn't picked one explicitly (list/card contexts have no
+    // variant picker) - cart items are always keyed by variant, not product
+    defaultVariantId: primary?.id ?? null,
   };
 }
 
@@ -33,14 +68,30 @@ export class StorefrontProductsService {
     const conditions: Prisma.ProductWhereInput[] = [{ status: 'ACTIVE', deletedAt: null }];
 
     if (query.category) {
+      // matches products assigned directly to this category, to any of its
+      // immediate children (the real category tree is two levels deep: a
+      // top-level category filter must also surface its children's products),
+      // or carrying it as a secondary category
       conditions.push({
         OR: [
           { category: { slug: query.category } },
+          { category: { parent: { slug: query.category } } },
           { secondaryCategories: { some: { category: { slug: query.category } } } },
         ],
       });
     }
-    if (query.brand) conditions.push({ brand: { slug: query.brand } });
+    if (query.brand) conditions.push({ brand: { slug: { in: query.brand.split(',').filter(Boolean) } } });
+    if (query.inStock) conditions.push({ variants: { some: { status: 'ACTIVE', deletedAt: null, stockQty: { gt: 0 } } } });
+    if (query.specs) {
+      let specs: unknown;
+      try { specs = JSON.parse(query.specs); } catch { throw new BadRequestException('Invalid specification filters'); }
+      if (!specs || typeof specs !== 'object' || Array.isArray(specs) || Object.values(specs).some((v) => !Array.isArray(v) || !v.length || v.some((x) => typeof x !== 'string'))) {
+        throw new BadRequestException('Specification filters must contain lists of values');
+      }
+      for (const [key, values] of Object.entries(specs as Record<string, string[]>)) {
+        conditions.push({ OR: values.map((value) => ({ specsSummary: { path: [key], equals: value } })) });
+      }
+    }
     if (query.q) {
       conditions.push({
         OR: [
@@ -50,29 +101,17 @@ export class StorefrontProductsService {
         ],
       });
     }
-    if (query.priceMin !== undefined || query.priceMax !== undefined) {
-      conditions.push({
-        variants: {
-          some: {
-            deletedAt: null,
-            status: 'ACTIVE',
-            price: {
-              ...(query.priceMin !== undefined ? { gte: query.priceMin } : {}),
-              ...(query.priceMax !== undefined ? { lte: query.priceMax } : {}),
-            },
-          },
-        },
-      });
-    }
-
     return { AND: conditions };
   }
 
   private async fetchProductsByIds(ids: number[]): Promise<ListProduct[]> {
     if (!ids.length) return [];
-    const products = await this.prisma.product.findMany({ where: { id: { in: ids } }, include: listInclude });
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: ids }, status: 'ACTIVE', deletedAt: null },
+      include: listInclude,
+    });
     const byId = new Map(products.map((p) => [p.id, p]));
-    return ids.map((id) => byId.get(id)!).filter(Boolean);
+    return ids.map((id) => byId.get(id)).filter((p): p is ListProduct => p !== undefined);
   }
 
   private async attachMedia(products: ListProduct[]) {
@@ -87,40 +126,99 @@ export class StorefrontProductsService {
     for (const item of media) {
       if (!firstByProduct.has(item.ownerId)) firstByProduct.set(item.ownerId, item);
     }
+    const reviews = productIds.length ? await this.prisma.review.groupBy({
+      by: ['productId'], where: { productId: { in: productIds }, status: 'APPROVED' },
+      _avg: { rating: true }, _count: { rating: true },
+    }) : [];
+    const reviewsByProduct = new Map(reviews.map((review) => [review.productId, review]));
     return products.map((product) => {
       const { variants, ...rest } = product;
       return {
         ...rest,
         image: firstByProduct.get(product.id)?.url ?? null,
+        reviewSummary: { average: reviewsByProduct.get(product.id)?._avg.rating ?? 0, count: reviewsByProduct.get(product.id)?._count.rating ?? 0 },
         ...pricingOf(variants),
       };
     });
+  }
+
+  // Facet counts (subcategories/brands/price range present in this filtered
+  // set) for a listing page's filter sidebar. Simplification: each facet is
+  // computed against the full current `where`, including its own dimension -
+  // not the "exclude this facet's own filter" faceting some storefronts do.
+  private async facets(where: Prisma.ProductWhereInput) {
+    const [categoryCounts, brandCounts, priceRange, specRows] = await Promise.all([
+      this.prisma.product.groupBy({ by: ['categoryId'], where, _count: { _all: true } }),
+      this.prisma.product.groupBy({ by: ['brandId'], where, _count: { _all: true } }),
+      this.prisma.productVariant.aggregate({
+        where: { deletedAt: null, status: 'ACTIVE', product: where },
+        _min: { price: true },
+        _max: { price: true },
+      }),
+      this.prisma.product.findMany({ where, select: { specsSummary: true } }),
+    ]);
+    const categoryIds = categoryCounts.map((c) => c.categoryId);
+    const brandIds = brandCounts.map((b) => b.brandId).filter((id): id is number => id !== null);
+    const [categories, brands] = await Promise.all([
+      categoryIds.length
+        ? this.prisma.category.findMany({ where: { id: { in: categoryIds } }, select: { id: true, title: true, slug: true } })
+        : [],
+      brandIds.length
+        ? this.prisma.brand.findMany({ where: { id: { in: brandIds } }, select: { id: true, title: true, slug: true } })
+        : [],
+    ]);
+    const categoryById = new Map(categories.map((c) => [c.id, c]));
+    const brandById = new Map(brands.map((b) => [b.id, b]));
+
+    const specificationCounts = new Map<string, Map<string, number>>();
+    for (const row of specRows) {
+      if (!row.specsSummary || typeof row.specsSummary !== 'object' || Array.isArray(row.specsSummary)) continue;
+      for (const [key, value] of Object.entries(row.specsSummary)) {
+        if (typeof value !== 'string' || !value.trim()) continue;
+        const values = specificationCounts.get(key) ?? new Map<string, number>();
+        values.set(value, (values.get(value) ?? 0) + 1);
+        specificationCounts.set(key, values);
+      }
+    }
+    return {
+      specifications: [...specificationCounts].map(([title, values]) => ({ title, values: [...values].map(([value, count]) => ({ value, count })) })),
+      categories: categoryCounts
+        .map((c) => ({ ...categoryById.get(c.categoryId), count: c._count._all }))
+        .filter((c): c is { id: number; title: string; slug: string; count: number } => c.id !== undefined),
+      brands: brandCounts
+        .filter((b) => b.brandId !== null)
+        .map((b) => ({ ...brandById.get(b.brandId!), count: b._count._all }))
+        .filter((b): b is { id: number; title: string; slug: string; count: number } => b.id !== undefined),
+      priceMin: priceRange._min.price !== null ? Number(priceRange._min.price) : null,
+      priceMax: priceRange._max.price !== null ? Number(priceRange._max.price) : null,
+    };
   }
 
   async list(query: ListStorefrontProductsQueryDto) {
     const page = query.page!;
     const perPage = query.perPage!;
     const sort = query.sort ?? 'newest';
-    const where = this.buildWhere(query);
-
-    if (sort === 'price_asc' || sort === 'price_desc') {
-      const variantWhere: Prisma.ProductVariantWhereInput = {
-        isDefault: true,
-        deletedAt: null,
-        status: 'ACTIVE',
-        product: where,
-      };
-      const [variantRows, total] = await Promise.all([
-        this.prisma.productVariant.findMany({
-          where: variantWhere,
-          orderBy: { price: sort === 'price_asc' ? 'asc' : 'desc' },
-          ...paginationSkipTake(page, perPage),
-          select: { productId: true },
-        }),
-        this.prisma.productVariant.count({ where: variantWhere }),
-      ]);
-      const products = await this.fetchProductsByIds(variantRows.map((v) => v.productId));
-      return { items: await this.attachMedia(products), meta: buildPaginationMeta(page, perPage, total) };
+    let where = this.buildWhere(query);
+    let priceOrderedIds: number[] | null = null;
+    if (query.priceMin !== undefined || query.priceMax !== undefined || query.onSale || sort === 'price_asc' || sort === 'price_desc') {
+      // Use the same primary-variant fallback as card pricing. Fetch full
+      // product records only for the requested page, not for this projection.
+      const candidates = await this.prisma.product.findMany({ where, select: { id: true, variants: listInclude.variants } });
+      const price = (row: (typeof candidates)[number]) => Number(row.variants[0]?.salePrice ?? row.variants[0]?.price ?? 0);
+      const matching = candidates.filter((row) => row.variants.length > 0
+        && (!query.onSale || row.variants[0].salePrice !== null)
+        && (query.priceMin === undefined || price(row) >= query.priceMin)
+        && (query.priceMax === undefined || price(row) <= query.priceMax));
+      if (sort === 'price_asc' || sort === 'price_desc') {
+        matching.sort((a, b) => (sort === 'price_asc' ? price(a) - price(b) : price(b) - price(a)) || a.id - b.id);
+        priceOrderedIds = matching.map((p) => p.id);
+      }
+      where = { AND: [where, { id: { in: matching.map((p) => p.id) } }] };
+    }
+    const facets = await this.facets(where);
+    if (priceOrderedIds) {
+      const ids = priceOrderedIds.slice((page - 1) * perPage, page * perPage);
+      return { items: await this.attachMedia(await this.fetchProductsByIds(ids)), meta: { ...buildPaginationMeta(page, perPage, priceOrderedIds.length), facets } };
     }
 
     const orderBy: Prisma.ProductOrderByWithRelationInput =
@@ -130,15 +228,96 @@ export class StorefrontProductsService {
       this.prisma.product.findMany({ where, orderBy, ...paginationSkipTake(page, perPage), include: listInclude }),
       this.prisma.product.count({ where }),
     ]);
-    return { items: await this.attachMedia(products), meta: buildPaginationMeta(page, perPage, total) };
+    return { items: await this.attachMedia(products), meta: { ...buildPaginationMeta(page, perPage, total), facets } };
+  }
+
+  // Used by the merchandising module to resolve featured-section products.
+  async byIds(ids: number[]) {
+    return this.attachMedia(await this.fetchProductsByIds(ids));
+  }
+
+  // "Goes well with" / "complete the build": products whose structured
+  // ProductCompatibility facts (socket, memory type, PSU wattage) actually
+  // match this one. The caller decides which category to search in (the
+  // frontend keeps its own editorial category-pairing map for that); this
+  // only answers "would these two actually work together".
+  async compatibleProducts(slug: string, query: CompatibleProductsQueryDto) {
+    const source = await this.prisma.product.findFirst({
+      where: { slug, status: 'ACTIVE', deletedAt: null },
+      select: { id: true, compatibility: true },
+    });
+    if (!source) throw new NotFoundException('Product not found');
+    if (!source.compatibility) return [];
+
+    const candidates = await this.prisma.product.findMany({
+      where: {
+        status: 'ACTIVE',
+        deletedAt: null,
+        id: { not: source.id },
+        compatibility: { isNot: null },
+        ...(query.category ? { category: { slug: query.category } } : {}),
+      },
+      select: { id: true, compatibility: true },
+      take: 300,
+    });
+
+    const limit = query.limit ?? 4;
+    const matchingIds = candidates
+      .filter((c) => isCompatible(source.compatibility!, c.compatibility!))
+      .slice(0, limit)
+      .map((c) => c.id);
+
+    return this.byIds(matchingIds);
+  }
+
+  async newest(limit: number) {
+    const products = await this.prisma.product.findMany({
+      where: { status: 'ACTIVE', deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      include: listInclude,
+    });
+    return this.attachMedia(products);
+  }
+
+  async featured(limit: number) {
+    const products = await this.prisma.product.findMany({
+      where: { status: 'ACTIVE', deletedAt: null, isFeatured: true },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      include: listInclude,
+    });
+    return this.attachMedia(products);
+  }
+
+  async bestSellers(limit: number) {
+    const sold = await this.prisma.orderItem.groupBy({
+      by: ['productId'],
+      _sum: { quantity: true },
+      orderBy: { _sum: { quantity: 'desc' } },
+      take: limit,
+    });
+    return this.byIds(sold.map((row) => row.productId));
+  }
+
+  async topRated(limit: number) {
+    const rated = await this.prisma.review.groupBy({
+      by: ['productId'],
+      where: { status: 'APPROVED' },
+      _avg: { rating: true },
+      orderBy: { _avg: { rating: 'desc' } },
+      take: limit,
+    });
+    return this.byIds(rated.map((row) => row.productId));
   }
 
   async bySlug(slug: string) {
     const product = await this.prisma.product.findFirst({
       where: { slug, status: 'ACTIVE', deletedAt: null },
       include: {
-        category: { select: { id: true, title: true, slug: true } },
+        category: { select: { id: true, title: true, slug: true, parent: { select: { id: true, title: true, slug: true } } } },
         brand: { select: { id: true, title: true, slug: true } },
+        compatibility: true,
         variants: {
           where: { deletedAt: null, status: 'ACTIVE' },
           include: { attributes: { include: { attribute: true, attributeValue: true } } },

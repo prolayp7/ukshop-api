@@ -5,5 +5,6 @@ import { StorefrontProductsService } from './storefront-products.service';
 @Module({
   controllers: [StorefrontProductsController],
   providers: [StorefrontProductsService],
+  exports: [StorefrontProductsService],
 })
 export class StorefrontProductsModule {}

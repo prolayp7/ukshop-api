@@ -139,6 +139,7 @@ export class CartService {
       create: { cartId: cart.id, productVariantId: dto.productVariantId, quantity: dto.quantity },
       update: { quantity: newQuantity },
     });
+    await this.prisma.cart.update({ where: { id: cart.id }, data: { updatedAt: new Date() } });
 
     const refreshed = await this.findCart(customerId, mintedGuestToken ?? guestToken);
     return this.present(refreshed, mintedGuestToken);
@@ -160,6 +161,7 @@ export class CartService {
         ...(dto.savedForLater !== undefined ? { savedForLater: dto.savedForLater } : {}),
       },
     });
+    await this.prisma.cart.update({ where: { id: cart.id }, data: { updatedAt: new Date() } });
 
     return this.getCart(customerId, guestToken);
   }
@@ -169,6 +171,7 @@ export class CartService {
     if (!cart) throw new NotFoundException('Cart not found');
     const result = await this.prisma.cartItem.deleteMany({ where: { cartId: cart.id, productVariantId } });
     if (!result.count) throw new NotFoundException('Cart item not found');
+    await this.prisma.cart.update({ where: { id: cart.id }, data: { updatedAt: new Date() } });
     return this.getCart(customerId, guestToken);
   }
 
@@ -190,6 +193,7 @@ export class CartService {
           update: { quantity: { increment: item.quantity } },
         });
       }
+      await tx.cart.update({ where: { id: customerCart.id }, data: { updatedAt: new Date() } });
       await tx.cart.delete({ where: { id: guestCart.id } });
     });
 

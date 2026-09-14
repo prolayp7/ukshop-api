@@ -5,6 +5,7 @@ import { CurrentAdmin } from '../../../common/admin/current-admin.decorator';
 import { PermissionsGuard } from '../../../common/admin/permissions.guard';
 import { RequirePermissions } from '../../../common/admin/permissions.decorator';
 import { ListOrdersQueryDto } from './dto/list-orders-query.dto';
+import { ListAbandonedCartsQueryDto } from './dto/list-abandoned-carts-query.dto';
 import { UpdateOrderItemStatusDto } from './dto/update-order-item-status.dto';
 import { UpdateOrderNoteDto } from './dto/update-order-note.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
@@ -19,6 +20,7 @@ export class OrdersController {
 
   @Get() list(@Query() query: ListOrdersQueryDto) { return this.service.list(query); }
   @Get('summary') summary() { return this.service.summary(); }
+  @Get('abandoned-carts') abandonedCarts(@Query() query: ListAbandonedCartsQueryDto) { return this.service.abandonedCarts(query); }
   @Get(':id') detail(@Param('id', ParseIntPipe) id: number) { return this.service.detail(id); }
 
   @Patch(':id/status')

@@ -21,6 +21,7 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { CreateProductFaqDto } from './dto/create-product-faq.dto';
 import { CreateProductVariantDto } from './dto/create-product-variant.dto';
 import { ListProductsQueryDto } from './dto/list-products-query.dto';
+import { ListStockQueryDto } from './dto/list-stock-query.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
 import { UpdateStockDto } from './dto/update-stock.dto';
@@ -52,6 +53,11 @@ export class ProductsController {
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024, files: 1 } }))
   import(@UploadedFile() file?: UploadedImportFile) {
     return this.importService.import(file);
+  }
+
+  @Get('stock')
+  stockList(@Query() query: ListStockQueryDto) {
+    return this.service.stockList(query);
   }
 
   @Get(':id')

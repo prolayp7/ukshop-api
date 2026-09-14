@@ -19,6 +19,35 @@ import {
   ValidateNested,
 } from 'class-validator';
 
+class ProductCompatibilityDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  socket?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  @MaxLength(60, { each: true })
+  compatibleSockets?: string[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  memoryType?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  wattageCapacity?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  wattageRequired?: number;
+}
+
 class InitialProductVariantDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
@@ -208,6 +237,11 @@ export class CreateProductDto {
   @ValidateNested()
   @Type(() => InitialProductVariantDto)
   initialVariant?: InitialProductVariantDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ProductCompatibilityDto)
+  compatibility?: ProductCompatibilityDto;
 
   @IsOptional()
   @IsBoolean()

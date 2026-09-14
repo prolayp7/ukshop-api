@@ -7,7 +7,10 @@ describe('PaymentAttemptsService', () => {
 
   it('rejects an unconfigured provider before creating an attempt', async () => {
     const prisma = { setting: { count: jest.fn().mockResolvedValue(0) } };
-    const service = new PaymentAttemptsService(prisma as never);
+    // create() only reaches PaymentStateService/PaypalGatewayService for a
+    // PAYPAL attempt (ensurePaypalOrder short-circuits otherwise) - this
+    // suite only exercises STRIPE, so undefined stand-ins are never touched.
+    const service = new PaymentAttemptsService(prisma as never, undefined as never, undefined as never);
 
     await expect(service.create(dto, 'checkout-session-0001')).rejects.toBeInstanceOf(ServiceUnavailableException);
     expect(prisma.setting.count).toHaveBeenCalledWith({ where: { key: 'integration.payment.stripe' } });
@@ -38,7 +41,10 @@ describe('PaymentAttemptsService', () => {
       $queryRaw: rootQuery,
       $transaction: jest.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
     };
-    const service = new PaymentAttemptsService(prisma as never);
+    // create() only reaches PaymentStateService/PaypalGatewayService for a
+    // PAYPAL attempt (ensurePaypalOrder short-circuits otherwise) - this
+    // suite only exercises STRIPE, so undefined stand-ins are never touched.
+    const service = new PaymentAttemptsService(prisma as never, undefined as never, undefined as never);
 
     const result = await service.create(dto, 'checkout-session-0001');
 

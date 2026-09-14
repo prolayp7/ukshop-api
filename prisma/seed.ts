@@ -366,6 +366,160 @@ async function main() {
     });
   }
 
+  // Homepage merchandising - demo content so the storefront home page has
+  // something real to render (Day 6 will replace this with production content
+  // entered through the admin panel).
+  //
+  // Hero slides were extended with eyebrow/image/tone/secondary CTA fields
+  // and Hero.tsx switched from a hardcoded SLIDES array to reading these
+  // live - reseed with content matching that hardcoded array exactly (only
+  // if still at the old 3-slide placeholder state) so the storefront looks
+  // identical until an admin actually edits a slide.
+  const oldPlaceholderSlide = await prisma.heroSlide.findFirst({ where: { headline: 'Deals now live' } });
+  const heroSlideCount = await prisma.heroSlide.count();
+  if (heroSlideCount === 0 || oldPlaceholderSlide) {
+    if (oldPlaceholderSlide) await prisma.heroSlide.deleteMany({});
+    await prisma.heroSlide.createMany({
+      data: [
+        { eyebrow: 'New generation graphics', headline: 'Radeon RX 9070 XT graphics, ready to perform', subheading: 'Explore high-performance graphics cards for smooth gaming, creative work and demanding everyday builds.', image: '/images/products/Sapphire Pulse RX 9070 XT Display.webp', imagePosition: '68% center', tone: 'VIOLET', ctaLabel: 'Shop graphics cards', ctaUrl: '/category?sub=Graphics%20Cards', secondaryCtaLabel: 'Compare components', secondaryCtaUrl: '/category?cat=PC%20Components', sortOrder: 1 },
+        { eyebrow: 'Portable performance', headline: 'Gaming laptops built for the next challenge', subheading: 'Find fast displays, powerful mobile graphics and capable processors in one streamlined setup.', image: '/images/products/ASUS ROG Zephyrus G16 Gaming Setup.webp', imagePosition: '64% center', tone: 'ELECTRIC', ctaLabel: 'Shop gaming laptops', ctaUrl: '/category?sub=Gaming%20Laptops', secondaryCtaLabel: 'Browse all laptops', secondaryCtaUrl: '/category?cat=Laptops', sortOrder: 2 },
+        { eyebrow: 'Build it your way', headline: 'Airflow-focused cases for cleaner PC builds', subheading: 'Start your next system with modern layouts, considered cooling and space for the components that matter.', image: '/images/products/NZXT H5 Flow RGB Showcase.webp', imagePosition: '72% center', tone: 'CYAN', ctaLabel: 'Shop PC cases', ctaUrl: '/category?sub=Cases', secondaryCtaLabel: 'Explore components', secondaryCtaUrl: '/category?cat=PC%20Components', sortOrder: 3 },
+        { eyebrow: 'Work from anywhere', headline: 'Business laptops with everyday staying power', subheading: 'Discover dependable, travel-ready machines designed for focused work at the office, at home or on the move.', image: '/images/products/ThinkPad X1 Carbon Aura Edition Showcase.webp', imagePosition: '68% center', tone: 'CRIMSON', ctaLabel: 'Shop business laptops', ctaUrl: '/category?sub=Business%20Laptops', secondaryCtaLabel: 'View all laptops', secondaryCtaUrl: '/category?cat=Laptops', sortOrder: 4 },
+      ],
+    });
+  }
+  const heroBadgeCount = await prisma.heroTrustBadge.count();
+  if (heroBadgeCount === 0) {
+    await prisma.heroTrustBadge.createMany({
+      data: [
+        { label: 'Free UK next-day delivery', icon: 'i-truck', sortOrder: 1 },
+        { label: '30-day returns', icon: 'i-shield', sortOrder: 2 },
+        { label: '0% finance available', icon: 'i-card', sortOrder: 3 },
+        { label: 'Manchester showroom', icon: 'i-wrench', sortOrder: 4 },
+      ],
+    });
+  }
+
+  const findOrCreateBanner = (slug: string, create: Parameters<typeof prisma.banner.create>[0]['data']) =>
+    prisma.banner.findFirst({ where: { slug } }).then((existing) => existing ?? prisma.banner.create({ data: create }));
+  await findOrCreateBanner('home-pc-components', {
+    title: 'PC Components', slug: 'home-pc-components', linkType: 'CATEGORY', categoryId: pcComponents.id, position: 'home-top', displayOrder: 1,
+  });
+  await findOrCreateBanner('home-laptops', {
+    title: 'Laptops', slug: 'home-laptops', linkType: 'CATEGORY', categoryId: laptops.id, position: 'home-top', displayOrder: 2,
+  });
+
+  const findOrCreateFeaturedSection = (slug: string, create: Parameters<typeof prisma.featuredSection.create>[0]['data']) =>
+    prisma.featuredSection.findFirst({ where: { slug } }).then((existing) => existing ?? prisma.featuredSection.create({ data: create }));
+  await findOrCreateFeaturedSection('new-arrivals', { title: 'New Arrivals', slug: 'new-arrivals', sectionType: 'NEWLY_ADDED', sortOrder: 1 });
+  await findOrCreateFeaturedSection('best-sellers', { title: 'Best Sellers', slug: 'best-sellers', sectionType: 'BEST_SELLER', sortOrder: 2 });
+  await findOrCreateFeaturedSection('top-rated', { title: 'Top Rated', slug: 'top-rated', sectionType: 'TOP_RATED', sortOrder: 3 });
+
+  // Homepage section ordering/visibility - seeded to match the storefront's
+  // existing default layout so nothing moves visually until an admin
+  // reorders or hides something from the admin panel.
+  const homepageSectionCount = await prisma.homepageSection.count();
+  if (homepageSectionCount === 0) {
+    await prisma.homepageSection.createMany({
+      data: [
+        { type: 'HERO', label: 'Hero carousel', sortOrder: 0, config: { cards: [
+          { kicker: 'Save up to £220', heading: 'Weekend component deals', description: 'CPUs, memory kits and NVMe drives reduced until Sunday midnight.', ctaLabel: 'See all deals', href: '/category?deals=1', image: '/images/products/Vengeance DDR5 RGB Memory Modules.webp' },
+          { kicker: 'Build service', heading: 'Custom PC configurator', description: 'Pick parts with compatibility checks and wattage estimates.', ctaLabel: 'Start a build', href: '/category?cat=Computers', image: '/images/products/NZXT H5 Flow RGB Showcase.webp' },
+        ] } },
+        { type: 'TRUST_STRIP', label: 'Trust strip', sortOrder: 1 },
+        { type: 'DEALS', label: "Today's deals", sortOrder: 2 },
+        { type: 'FEATURED_PRODUCTS', label: 'Best sellers', sortOrder: 3, config: { slug: 'best-sellers' } },
+        { type: 'NEW_ARRIVALS', label: 'New arrivals', sortOrder: 4 },
+        { type: 'BRANDS', label: 'Shop by brand', sortOrder: 5 },
+        { type: 'BANNERS', label: 'Promotional banners', sortOrder: 6, config: { position: 'home-top' } },
+        { type: 'TESTIMONIALS', label: 'Customer testimonials', sortOrder: 7 },
+        { type: 'BLOG_HIGHLIGHTS', label: 'Latest from the blog', sortOrder: 8 },
+        { type: 'FAQS', label: 'Frequently asked questions', sortOrder: 9 },
+        { type: 'NEWSLETTER', label: 'Newsletter signup', sortOrder: 10, config: { heading: 'Get restock alerts & deal notifications', body: 'One email a week, mostly about stock drops and price cuts. No spam.' } },
+      ],
+    });
+  }
+  // Added in a follow-up batch, once these types existed - findFirst-or-
+  // create per type (rather than another count()===0 guard) so this runs
+  // safely against a DB that already has the first 11 rows seeded.
+  const findOrCreateHomepageSection = (type: Parameters<typeof prisma.homepageSection.create>[0]['data']['type'], data: Omit<Parameters<typeof prisma.homepageSection.create>[0]['data'], 'type'>) =>
+    prisma.homepageSection.findFirst({ where: { type } }).then((existing) => existing ?? prisma.homepageSection.create({ data: { type, ...data } }));
+  await findOrCreateHomepageSection('CATEGORY_SHOWCASE', { label: 'Shop by category', sortOrder: 11 });
+  await findOrCreateHomepageSection('SHOP_BY_NEED', { label: 'Shop by need', sortOrder: 12 });
+  await findOrCreateHomepageSection('GAMING_SHOWCASE', { label: 'Level up your gaming', sortOrder: 13 });
+  await findOrCreateHomepageSection('LAPTOP_SHOWCASE', { label: 'Laptops for work, study & play', sortOrder: 14 });
+  await findOrCreateHomepageSection('BUYING_GUIDES', { label: 'Buying guides', sortOrder: 15 });
+  await findOrCreateHomepageSection('SEO_INTRO', { label: 'SEO intro & special offer', sortOrder: 16 });
+
+  // Blog & static CMS pages - demo content for the storefront's content pages.
+  const blogCategory = await prisma.blogCategory.upsert({
+    where: { slug: 'buying-guides' },
+    update: {},
+    create: { title: 'Buying Guides', slug: 'buying-guides' },
+  });
+  const author = await prisma.author.findFirst({ where: { name: 'UK Computer Shop Team' } }).then((existing) =>
+    existing ?? prisma.author.create({ data: { name: 'UK Computer Shop Team', role: 'Editorial' } }),
+  );
+  const findOrCreateBlogPost = (slug: string, create: Parameters<typeof prisma.blogPost.create>[0]['data']) =>
+    prisma.blogPost.findFirst({ where: { slug } }).then((existing) => existing ?? prisma.blogPost.create({ data: create }));
+  await findOrCreateBlogPost('choosing-your-first-graphics-card', {
+    title: 'Choosing your first graphics card',
+    slug: 'choosing-your-first-graphics-card',
+    excerpt: 'A plain-English guide to VRAM, wattage and what actually matters for 1080p and 1440p gaming.',
+    content:
+      'Picking a graphics card can feel overwhelming with so many model numbers and marketing terms flying around. Start with your monitor: its resolution and refresh rate tell you roughly how much GPU power you need.\n\nFor 1080p at 60Hz, a mid-range card is plenty. For 1440p or high-refresh gaming, look at cards with more VRAM and a higher power draw - just make sure your power supply can keep up.\n\nCheck the recommended PSU wattage on the product page before you buy, and use our compatibility checks on the product page to confirm your case and power supply will work together.',
+    blogCategoryId: blogCategory.id,
+    authorId: author.id,
+    status: 'PUBLISHED',
+    publishedAt: new Date(),
+    isFeatured: true,
+  });
+  await findOrCreateBlogPost('building-a-quiet-pc', {
+    title: 'Building a quiet PC without sacrificing performance',
+    slug: 'building-a-quiet-pc',
+    excerpt: 'Case airflow, fan curves and cooler choice - the three things that actually determine how loud your PC is.',
+    content:
+      'A quiet PC comes down to three things: case airflow, fan quality, and how hard your components have to work to stay cool.\n\nStart with a case that has good airflow rather than the most RGB. Pair it with larger, slower-spinning fans rather than small fast ones - bigger fans move the same air at a lower pitch.\n\nFinally, a well-sized cooler for your CPU means your fans rarely need to spin up in the first place.',
+    blogCategoryId: blogCategory.id,
+    authorId: author.id,
+    status: 'PUBLISHED',
+    publishedAt: new Date(),
+  });
+
+  const findOrCreatePage = (slug: string, create: Parameters<typeof prisma.page.create>[0]['data']) =>
+    prisma.page.findFirst({ where: { slug } }).then((existing) => existing ?? prisma.page.create({ data: create }));
+  await findOrCreatePage('about-us', {
+    slug: 'about-us',
+    title: 'About UK Computer Shop',
+    status: 'PUBLISHED',
+    contentBlocks: 'We are an independent UK retailer based in Manchester, building and shipping PCs and components since day one.\n\nOur warehouse and workshop are open Monday to Saturday, and our team tests every custom build before it ships.',
+  });
+
+  const deliveryFaqCategory = await prisma.faqCategory.findFirst({ where: { name: 'Delivery & Returns' } }).then((existing) =>
+    existing ?? prisma.faqCategory.create({ data: { name: 'Delivery & Returns', sortOrder: 1 } }),
+  );
+  const faqCount = await prisma.faq.count({ where: { faqCategoryId: deliveryFaqCategory.id } });
+  if (faqCount === 0) {
+    await prisma.faq.createMany({
+      data: [
+        { faqCategoryId: deliveryFaqCategory.id, question: 'How fast is delivery?', answer: 'Orders placed before 17:00 on a working day ship the same day, with free next-day delivery on orders over £75.', sortOrder: 1 },
+        { faqCategoryId: deliveryFaqCategory.id, question: 'What is your returns policy?', answer: 'You can return most items within 30 days of delivery in their original packaging for a full refund.', sortOrder: 2 },
+        { faqCategoryId: deliveryFaqCategory.id, question: 'Do you build custom PCs?', answer: 'Yes - every custom build is assembled and stress-tested for 48 hours at our Manchester workshop before it ships.', sortOrder: 3 },
+      ],
+    });
+  }
+
+  const testimonialCount = await prisma.testimonial.count();
+  if (testimonialCount === 0) {
+    await prisma.testimonial.createMany({
+      data: [
+        { name: 'Daniel H.', title: 'Verified buyer', quote: 'Ordered Tuesday afternoon, arrived Wednesday morning. Genuinely well packaged.', stars: 5, sortOrder: 1 },
+        { name: 'Priya S.', title: 'Verified buyer', quote: 'Spec sheet matched the product to the letter, which is more than I can say for other retailers.', stars: 5, sortOrder: 2 },
+        { name: 'Mark T.', title: 'Verified buyer', quote: 'No complaints about performance, and support answered my question the same day.', stars: 4, sortOrder: 3 },
+      ],
+    });
+  }
+
   console.log('Seed complete.');
 }
 

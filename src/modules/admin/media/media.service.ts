@@ -2,6 +2,11 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 const sharp = require('sharp');
 export interface UploadedMediaFile { filename: string; originalname: string; mimetype: string; size: number; path: string; }
 const extensionByType: Record<string, string> = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif', 'image/avif': '.avif', 'application/pdf': '.pdf', 'text/csv': '.csv', 'application/msword': '.doc', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx' };
+// SEO-friendly filenames: slugify the alt text (e.g. a hero slide's headline)
+// and keep multer's random name alongside it so uploads never collide.
+function slugify(text: string): string {
+  return text.toLowerCase().normalize('NFKD').replace(/\p{Diacritic}/gu, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+}
 @Injectable() export class MediaService {
   constructor(private readonly prisma: PrismaService) {}
   async assertOwner(type: MediaOwnerType, id: number) {
@@ -62,7 +67,8 @@ const extensionByType: Record<string, string> = { 'image/jpeg': '.jpg', 'image/p
       const extension = extensionByType[file.mimetype]; if (!extension) throw new BadRequestException('Unsupported file type');
       await this.assertOwner(dto.ownerType, dto.ownerId);
       const isImage = file.mimetype.startsWith('image/');
-      const filename = `${file.filename}${isImage ? '.webp' : extension}`;
+      const seoSlug = dto.altText ? slugify(dto.altText) : '';
+      const filename = `${seoSlug ? `${seoSlug}-` : ''}${file.filename}${isImage ? '.webp' : extension}`;
       target = join(mediaUploadDirectory, filename);
       let metadata: Prisma.InputJsonObject;
       if (isImage) {

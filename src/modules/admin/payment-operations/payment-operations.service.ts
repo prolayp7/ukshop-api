@@ -9,12 +9,17 @@ import { ListTransactionsQueryDto } from './dto/list-transactions-query.dto';
 import { RefundReturnDto } from './dto/refund-return.dto';
 import { RejectReturnDto } from './dto/reject-return.dto';
 import { UpdateDisputeDto } from './dto/update-dispute.dto';
+import { EmailService } from '../../email/email.service';
+import { orderRefundedEmail } from '../../email/email-templates';
 
 const returnInclude = { user: { select: { id: true, email: true, firstName: true, lastName: true } }, orderItem: { include: { order: true, product: true, productVariant: true } } };
 
 @Injectable()
 export class PaymentOperationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly emailService: EmailService,
+  ) {}
   async listReturns(query: ListReturnsQueryDto) {
     const page = query.page!; const perPage = query.perPage!; const where = query.status ? { returnStatus: query.status } : {};
     const [items, total] = await Promise.all([
@@ -53,6 +58,10 @@ export class PaymentOperationsService {
       const refund = await tx.paymentRefund.create({ data: { transactionId: transaction.id, orderId, amount: dto.refundAmount, reason: `Return request ${id}` } });
       const returnRequest = await tx.orderItemReturn.update({ where: { id }, data: { refundAmount: dto.refundAmount }, include: returnInclude });
       return { returnRequest, refund };
+    }).then((result) => {
+      const email = orderRefundedEmail({ orderNumber: item.orderItem.order.orderNumber, refundAmount: dto.refundAmount.toFixed(2) });
+      void this.emailService.send(item.orderItem.order.email, email.subject, email.html);
+      return result;
     });
   }
   async listTransactions(query: ListTransactionsQueryDto) {

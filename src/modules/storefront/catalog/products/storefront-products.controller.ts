@@ -1,6 +1,7 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { StorefrontProductsService } from './storefront-products.service';
 import { ListStorefrontProductsQueryDto } from './dto/list-storefront-products-query.dto';
+import { CompatibleProductsQueryDto } from './dto/compatible-products-query.dto';
 
 @Controller('products')
 export class StorefrontProductsController {
@@ -9,6 +10,11 @@ export class StorefrontProductsController {
   @Get()
   list(@Query() query: ListStorefrontProductsQueryDto) {
     return this.productsService.list(query);
+  }
+
+  @Get(':slug/compatible')
+  compatible(@Param('slug') slug: string, @Query() query: CompatibleProductsQueryDto) {
+    return this.productsService.compatibleProducts(slug, query);
   }
 
   @Get(':slug')

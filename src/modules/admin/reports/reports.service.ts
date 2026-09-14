@@ -9,4 +9,66 @@ import { BadRequestException, Injectable } from '@nestjs/common'; import { Prism
   async customers(query: DateRangeQueryDto) { const range = this.range(query.dateFrom, query.dateTo); const newCustomers = await this.prisma.user.count({ where: { createdAt: range, deletedAt: null } }); const during = await this.prisma.order.findMany({ where: { placedAt: range, userId: { not: null } }, distinct: ['userId'], select: { userId: true } }); const ids = during.map(row => row.userId!).filter(Boolean); const prior = ids.length ? await this.prisma.order.findMany({ where: { userId: { in: ids }, placedAt: { lt: range.gte } }, distinct: ['userId'], select: { userId: true } }) : []; const spend = await this.prisma.order.groupBy({ by: ['userId'], where: { placedAt: range, userId: { not: null } }, _sum: { total: true }, _count: { id: true }, orderBy: { _sum: { total: 'desc' } }, take: 10 }); const users = await this.prisma.user.findMany({ where: { id: { in: spend.map(row => row.userId!).filter(Boolean) } }, select: { id: true, email: true, firstName: true, lastName: true } }); const byId = new Map(users.map(user => [user.id, user])); return { newCustomers, returningCustomers: prior.length, topSpenders: spend.map(row => ({ user: byId.get(row.userId!), totalSpent: Number(row._sum.total ?? 0), orderCount: row._count.id })) }; }
   async inventory(query: InventoryReportQueryDto) { const variants = await this.prisma.productVariant.findMany({ where: { deletedAt: null, product: { deletedAt: null } }, include: { product: true }, orderBy: { stockQty: 'asc' } }); return variants.filter(variant => variant.stockQty <= (query.threshold ?? variant.lowStockThreshold)); }
   async orders(query: DateRangeQueryDto) { const range = this.range(query.dateFrom, query.dateTo); const [statuses, payments] = await Promise.all([this.prisma.order.groupBy({ by: ['status'], where: { placedAt: range }, _count: { id: true } }), this.prisma.order.groupBy({ by: ['paymentStatus'], where: { placedAt: range }, _count: { id: true } })]); return { byStatus: Object.fromEntries(statuses.map(row => [row.status, row._count.id])), byPaymentStatus: Object.fromEntries(payments.map(row => [row.paymentStatus, row._count.id])) }; }
+  async categoryBrandSales(query: DateRangeQueryDto) {
+    const range = this.range(query.dateFrom, query.dateTo);
+    const items = await this.prisma.orderItem.findMany({
+      where: { order: { placedAt: range, paymentStatus: { in: ['PAID', 'PARTIALLY_REFUNDED', 'REFUNDED'] } } },
+      select: { subtotal: true, quantity: true, product: { select: { categoryId: true, brandId: true } } },
+    });
+    const byCategory = new Map<number, { revenue: number; unitsSold: number }>();
+    const byBrand = new Map<number, { revenue: number; unitsSold: number }>();
+    for (const item of items) {
+      const catPoint = byCategory.get(item.product.categoryId) ?? { revenue: 0, unitsSold: 0 };
+      catPoint.revenue += Number(item.subtotal); catPoint.unitsSold += item.quantity;
+      byCategory.set(item.product.categoryId, catPoint);
+      if (item.product.brandId) {
+        const brandPoint = byBrand.get(item.product.brandId) ?? { revenue: 0, unitsSold: 0 };
+        brandPoint.revenue += Number(item.subtotal); brandPoint.unitsSold += item.quantity;
+        byBrand.set(item.product.brandId, brandPoint);
+      }
+    }
+    const [categories, brands] = await Promise.all([
+      this.prisma.category.findMany({ where: { id: { in: [...byCategory.keys()] } }, select: { id: true, title: true } }),
+      this.prisma.brand.findMany({ where: { id: { in: [...byBrand.keys()] } }, select: { id: true, title: true } }),
+    ]);
+    const categoryTitles = new Map(categories.map(c => [c.id, c.title]));
+    const brandTitles = new Map(brands.map(b => [b.id, b.title]));
+    return {
+      byCategory: [...byCategory].map(([id, v]) => ({ categoryId: id, title: categoryTitles.get(id) ?? 'Unknown', revenue: Number(v.revenue.toFixed(2)), unitsSold: v.unitsSold })).sort((a, b) => b.revenue - a.revenue),
+      byBrand: [...byBrand].map(([id, v]) => ({ brandId: id, title: brandTitles.get(id) ?? 'Unknown', revenue: Number(v.revenue.toFixed(2)), unitsSold: v.unitsSold })).sort((a, b) => b.revenue - a.revenue),
+    };
+  }
+  async coupons(query: DateRangeQueryDto) {
+    const range = this.range(query.dateFrom, query.dateTo);
+    const lines = await this.prisma.orderCouponLine.findMany({
+      where: { order: { placedAt: range, paymentStatus: { in: ['PAID', 'PARTIALLY_REFUNDED', 'REFUNDED'] } } },
+      select: { couponId: true, couponCode: true, discountAmount: true, order: { select: { total: true } } },
+    });
+    const byCoupon = new Map<number, { code: string; ordersCount: number; totalDiscount: number; revenue: number }>();
+    for (const line of lines) {
+      const point = byCoupon.get(line.couponId) ?? { code: line.couponCode, ordersCount: 0, totalDiscount: 0, revenue: 0 };
+      point.ordersCount += 1; point.totalDiscount += Number(line.discountAmount); point.revenue += Number(line.order.total);
+      byCoupon.set(line.couponId, point);
+    }
+    return { rows: [...byCoupon].map(([couponId, v]) => ({ couponId, code: v.code, ordersCount: v.ordersCount, totalDiscount: Number(v.totalDiscount.toFixed(2)), revenue: Number(v.revenue.toFixed(2)) })).sort((a, b) => b.ordersCount - a.ordersCount) };
+  }
+  private postcodeArea(postcode: string): string {
+    const match = postcode.trim().toUpperCase().match(/^([A-Z]{1,2})\d/);
+    return match ? match[1] : 'UNKNOWN';
+  }
+  async geography(query: DateRangeQueryDto) {
+    const range = this.range(query.dateFrom, query.dateTo);
+    const orders = await this.prisma.order.findMany({
+      where: { placedAt: range, paymentStatus: { in: ['PAID', 'PARTIALLY_REFUNDED', 'REFUNDED'] } },
+      select: { shippingPostcode: true, total: true },
+    });
+    const byArea = new Map<string, { revenue: number; orderCount: number }>();
+    for (const order of orders) {
+      const area = this.postcodeArea(order.shippingPostcode);
+      const point = byArea.get(area) ?? { revenue: 0, orderCount: 0 };
+      point.revenue += Number(order.total); point.orderCount += 1;
+      byArea.set(area, point);
+    }
+    return { rows: [...byArea].map(([postcodeArea, v]) => ({ postcodeArea, orderCount: v.orderCount, revenue: Number(v.revenue.toFixed(2)) })).sort((a, b) => b.revenue - a.revenue) };
+  }
 }

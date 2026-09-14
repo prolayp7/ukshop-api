@@ -76,8 +76,10 @@ describe('Storefront Checkout (e2e)', () => {
     expect(order.paymentStatus).toBe('PENDING');
     expect(Number(order.subtotal)).toBeCloseTo(variantPrice * 2, 2);
     expect(Number(order.shippingCharge)).toBeCloseTo(shippingRate, 2);
+    // subtotal is VAT-inclusive, so total doesn't add vatTotal on top -
+    // vatTotal is only the informational VAT component within subtotal.
     expect(Number(order.total)).toBeCloseTo(
-      Number(order.subtotal) - Number(order.discountTotal) + Number(order.shippingCharge) + Number(order.vatTotal),
+      Number(order.subtotal) - Number(order.discountTotal) + Number(order.shippingCharge),
       2,
     );
     expect(order.items).toHaveLength(1);

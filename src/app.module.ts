@@ -32,6 +32,7 @@ import { MediaModule } from './modules/admin/media/media.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { StorefrontAuthModule } from './modules/storefront/auth/storefront-auth.module';
 import { StorefrontCategoriesModule } from './modules/storefront/catalog/categories/storefront-categories.module';
+import { StorefrontSettingsModule } from './modules/storefront/settings/storefront-settings.module';
 import { StorefrontBrandsModule } from './modules/storefront/catalog/brands/storefront-brands.module';
 import { StorefrontProductsModule } from './modules/storefront/catalog/products/storefront-products.module';
 import { StorefrontAddressesModule } from './modules/storefront/addresses/storefront-addresses.module';
@@ -41,6 +42,9 @@ import { StorefrontShippingModule } from './modules/storefront/shipping/storefro
 import { OrdersModule as StorefrontOrdersModule } from './modules/storefront/orders/orders.module';
 import { WishlistModule } from './modules/storefront/wishlist/wishlist.module';
 import { StorefrontReviewsModule } from './modules/storefront/reviews/reviews.module';
+import { EmailModule } from './modules/email/email.module';
+import { StorefrontMerchandisingModule } from './modules/storefront/merchandising/storefront-merchandising.module';
+import { StorefrontCmsModule } from './modules/storefront/cms/storefront-cms.module';
 
 @Module({
   imports: [
@@ -58,10 +62,12 @@ import { StorefrontReviewsModule } from './modules/storefront/reviews/reviews.mo
       }),
     }),
     PrismaModule,
+    EmailModule,
     AdminCoreModule,
     AdminAuthModule,
     StorefrontAuthModule,
     StorefrontCategoriesModule,
+    StorefrontSettingsModule,
     StorefrontBrandsModule,
     StorefrontProductsModule,
     StorefrontAddressesModule,
@@ -71,6 +77,8 @@ import { StorefrontReviewsModule } from './modules/storefront/reviews/reviews.mo
     StorefrontOrdersModule,
     WishlistModule,
     StorefrontReviewsModule,
+    StorefrontMerchandisingModule,
+    StorefrontCmsModule,
     CustomersModule,
     CategoriesModule,
     BrandsModule,

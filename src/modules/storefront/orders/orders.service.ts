@@ -7,6 +7,8 @@ import { CartService } from '../cart/cart.service';
 import { StorefrontShippingService } from '../shipping/storefront-shipping.service';
 import { StorefrontCouponsService } from '../coupons/coupons.service';
 import { CheckoutDto } from './dto/checkout.dto';
+import { EmailService } from '../../email/email.service';
+import { orderConfirmationEmail } from '../../email/email-templates';
 
 const orderDetailInclude = {
   items: true,
@@ -26,6 +28,7 @@ export class OrdersService {
     private readonly cartService: CartService,
     private readonly shippingService: StorefrontShippingService,
     private readonly couponsService: StorefrontCouponsService,
+    private readonly emailService: EmailService,
   ) {}
 
   private async generateOrderNumber(): Promise<string> {
@@ -63,7 +66,10 @@ export class OrdersService {
       const unitPrice = Number(variant.salePrice ?? variant.price);
       const vatRatePercent = Number(variant.product.taxRate?.ratePercent ?? 0);
       const subtotal = round2(unitPrice * item.quantity);
-      const vatAmount = round2(subtotal * (vatRatePercent / 100));
+      // Catalogue prices are VAT-inclusive (matches every storefront price
+      // display), so vatAmount extracts the VAT already inside subtotal
+      // rather than adding it on top - see the total calculation below.
+      const vatAmount = round2(subtotal - subtotal / (1 + vatRatePercent / 100));
       return {
         productId: variant.product.id,
         productVariantId: variant.id,
@@ -105,7 +111,9 @@ export class OrdersService {
       }
     }
 
-    const total = round2(subtotal - discountTotal + shippingCharge + vatTotal);
+    // subtotal is already VAT-inclusive - vatTotal is the informational
+    // VAT component within it, not an additional charge.
+    const total = round2(subtotal - discountTotal + shippingCharge);
     const shipping = dto.shippingAddress;
     const billing = dto.billingAddress ?? dto.shippingAddress;
     const orderNumber = await this.generateOrderNumber();
@@ -185,6 +193,13 @@ export class OrdersService {
 
       return order;
     });
+
+    const confirmation = orderConfirmationEmail({
+      orderNumber: created.orderNumber,
+      total: total.toFixed(2),
+      itemCount: lines.length,
+    });
+    void this.emailService.send(email, confirmation.subject, confirmation.html);
 
     return this.findByUuid(created.uuid);
   }

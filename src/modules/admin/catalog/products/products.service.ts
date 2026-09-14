@@ -11,6 +11,7 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { CreateProductFaqDto } from './dto/create-product-faq.dto';
 import { CreateProductVariantDto } from './dto/create-product-variant.dto';
 import { ListProductsQueryDto } from './dto/list-products-query.dto';
+import { ListStockQueryDto } from './dto/list-stock-query.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
 import { UpdateStockDto } from './dto/update-stock.dto';
@@ -20,6 +21,7 @@ const productDetailInclude = {
   brand: true,
   productCondition: true,
   taxRate: true,
+  compatibility: true,
   secondaryCategories: { include: { category: true } },
   relatedProducts: { include: { relatedProduct: true } },
   shippingMethods: { include: { shippingMethod: true } },
@@ -141,7 +143,7 @@ export class ProductsService {
   }
 
   private productData(dto: CreateProductDto | UpdateProductDto) {
-    const { secondaryCategoryIds: _secondaryCategoryIds, relatedProductIds: _relatedProductIds, shippingMethodIds: _shippingMethodIds, initialVariant: _initialVariant, specsSummary, ...fields } = dto;
+    const { secondaryCategoryIds: _secondaryCategoryIds, relatedProductIds: _relatedProductIds, shippingMethodIds: _shippingMethodIds, initialVariant: _initialVariant, compatibility: _compatibility, specsSummary, ...fields } = dto;
     return {
       ...fields,
       ...(specsSummary !== undefined
@@ -187,6 +189,9 @@ export class ProductsService {
       if (dto.shippingMethodIds?.length) {
         await tx.productShippingMethod.createMany({ data: dto.shippingMethodIds.map((shippingMethodId) => ({ productId: product.id, shippingMethodId })) });
       }
+      if (dto.compatibility) {
+        await tx.productCompatibility.create({ data: { productId: product.id, ...dto.compatibility } });
+      }
       return tx.product.findUniqueOrThrow({ where: { id: product.id }, include: productDetailInclude });
     }).catch((error: unknown) => this.mapRelationError(error));
   }
@@ -222,6 +227,13 @@ export class ProductsService {
             data: { productId: id, title: 'Default', slug: 'default', isDefault: true, ...variantData },
           });
         }
+      }
+      if (dto.compatibility !== undefined) {
+        await tx.productCompatibility.upsert({
+          where: { productId: id },
+          create: { productId: id, ...dto.compatibility },
+          update: dto.compatibility,
+        });
       }
       if (dto.secondaryCategoryIds !== undefined) {
         await tx.categoryProduct.deleteMany({ where: { productId: id } });
@@ -493,6 +505,46 @@ export class ProductsService {
       where: { id: variantId },
       data: { deletedAt: new Date(), isDefault: false },
     });
+  }
+
+  async stockList(query: ListStockQueryDto) {
+    const page = query.page!;
+    const perPage = query.perPage!;
+    const where: Prisma.ProductVariantWhereInput = {
+      deletedAt: null,
+      product: { deletedAt: null },
+      ...(query.q
+        ? {
+            OR: [
+              { title: { contains: query.q, mode: 'insensitive' } },
+              { barcode: { contains: query.q, mode: 'insensitive' } },
+              { product: { is: { title: { contains: query.q, mode: 'insensitive' } } } },
+              { product: { is: { sku: { contains: query.q, mode: 'insensitive' } } } },
+            ],
+          }
+        : {}),
+    };
+    const variants = await this.prisma.productVariant.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' },
+      include: { product: { select: { id: true, title: true, sku: true, supplier: { select: { title: true } } } } },
+    });
+    let rows = variants.map((variant) => ({
+      variantId: variant.id,
+      productId: variant.productId,
+      productTitle: variant.product.title,
+      variantTitle: variant.title,
+      sku: variant.product.sku,
+      barcode: variant.barcode,
+      supplier: variant.product.supplier?.title ?? null,
+      stockQty: variant.stockQty,
+      lowStockThreshold: variant.lowStockThreshold,
+      isLowStock: variant.stockQty <= variant.lowStockThreshold,
+    }));
+    if (query.lowStockOnly) rows = rows.filter((row) => row.isLowStock);
+    const total = rows.length;
+    const start = (page - 1) * perPage;
+    return { items: rows.slice(start, start + perPage), meta: buildPaginationMeta(page, perPage, total) };
   }
 
   async updateStock(productId: number, variantId: number, dto: UpdateStockDto) {

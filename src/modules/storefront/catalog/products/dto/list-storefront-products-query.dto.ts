@@ -1,5 +1,5 @@
-import { Type } from 'class-transformer';
-import { IsIn, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsBoolean, IsIn, IsJSON, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { PaginationQueryDto } from '../../../../../common/dto/pagination-query.dto';
 
 const SORT_OPTIONS = ['newest', 'price_asc', 'price_desc', 'name_asc', 'name_desc'] as const;
@@ -18,7 +18,7 @@ export class ListStorefrontProductsQueryDto extends PaginationQueryDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(160)
+  @MaxLength(2000)
   brand?: string;
 
   @IsOptional()
@@ -38,4 +38,20 @@ export class ListStorefrontProductsQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsIn(SORT_OPTIONS)
   sort?: ProductSort = 'newest';
+
+  @IsOptional()
+  @IsString()
+  @IsJSON()
+  @MaxLength(4000)
+  specs?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  inStock?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  onSale?: boolean;
 }
