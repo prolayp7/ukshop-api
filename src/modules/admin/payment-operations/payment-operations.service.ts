@@ -56,7 +56,7 @@ export class PaymentOperationsService {
       const aggregate = await tx.paymentRefund.aggregate({ where: { transactionId: transaction.id, status: { in: ['PENDING', 'PROCESSED'] } }, _sum: { amount: true } });
       if (Number(aggregate._sum.amount ?? 0) + dto.refundAmount > Number(transaction.amount)) throw new BadRequestException('Refund exceeds the remaining captured amount');
       const refund = await tx.paymentRefund.create({ data: { transactionId: transaction.id, orderId, amount: dto.refundAmount, reason: `Return request ${id}` } });
-      const returnRequest = await tx.orderItemReturn.update({ where: { id }, data: { refundAmount: dto.refundAmount }, include: returnInclude });
+      const returnRequest = await tx.orderItemReturn.update({ where: { id }, data: { refundAmount: dto.refundAmount, returnStatus: 'REFUNDED', refundedAt: new Date() }, include: returnInclude });
       return { returnRequest, refund };
     }).then((result) => {
       const email = orderRefundedEmail({ orderNumber: item.orderItem.order.orderNumber, refundAmount: dto.refundAmount.toFixed(2) });

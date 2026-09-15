@@ -42,6 +42,9 @@ import { StorefrontShippingModule } from './modules/storefront/shipping/storefro
 import { OrdersModule as StorefrontOrdersModule } from './modules/storefront/orders/orders.module';
 import { WishlistModule } from './modules/storefront/wishlist/wishlist.module';
 import { StorefrontReviewsModule } from './modules/storefront/reviews/reviews.module';
+import { StorefrontReturnsModule } from './modules/storefront/returns/returns.module';
+import { NewsletterModule } from './modules/storefront/newsletter/newsletter.module';
+import { AdminNewsletterModule } from './modules/admin/newsletter/newsletter.module';
 import { EmailModule } from './modules/email/email.module';
 import { StorefrontMerchandisingModule } from './modules/storefront/merchandising/storefront-merchandising.module';
 import { StorefrontCmsModule } from './modules/storefront/cms/storefront-cms.module';
@@ -77,6 +80,8 @@ import { StorefrontCmsModule } from './modules/storefront/cms/storefront-cms.mod
     StorefrontOrdersModule,
     WishlistModule,
     StorefrontReviewsModule,
+    StorefrontReturnsModule,
+    NewsletterModule,
     StorefrontMerchandisingModule,
     StorefrontCmsModule,
     CustomersModule,
@@ -95,6 +100,7 @@ import { StorefrontCmsModule } from './modules/storefront/cms/storefront-cms.mod
     CouponsModule,
     PaymentOperationsModule,
     ReviewsModule,
+    AdminNewsletterModule,
     GiftCardsModule,
     MerchandisingModule,
     MenusModule,

@@ -8,10 +8,12 @@ import { StorefrontShippingService } from '../shipping/storefront-shipping.servi
 import { StorefrontCouponsService } from '../coupons/coupons.service';
 import { CheckoutDto } from './dto/checkout.dto';
 import { EmailService } from '../../email/email.service';
-import { orderConfirmationEmail } from '../../email/email-templates';
+import { orderConfirmationEmail, orderCancelledEmail } from '../../email/email-templates';
+
+const CANCELLABLE_STATUSES = ['PENDING', 'AWAITING_PAYMENT', 'PROCESSING'];
 
 const orderDetailInclude = {
-  items: true,
+  items: { include: { returns: { select: { id: true, returnStatus: true } } } },
   shippingMethod: { select: { id: true, title: true, carrier: true } },
   shipments: { include: { events: { orderBy: { occurredAt: 'desc' as const } } } },
   statusHistory: { orderBy: { createdAt: 'asc' as const } },
@@ -224,5 +226,28 @@ export class OrdersService {
     const order = await this.findByUuid(uuid);
     if (order.userId !== customerId) throw new NotFoundException('Order not found');
     return order;
+  }
+
+  async cancel(customerId: number, uuid: string, reason?: string) {
+    const order = await this.findByUuid(uuid);
+    if (order.userId !== customerId) throw new NotFoundException('Order not found');
+    if (!CANCELLABLE_STATUSES.includes(order.status)) {
+      throw new BadRequestException(`Order cannot be cancelled once it is ${order.status.toLowerCase().replace(/_/g, ' ')}`);
+    }
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.order.update({ where: { id: order.id }, data: { status: 'CANCELLED' } });
+      await tx.orderStatusHistory.create({
+        data: { orderId: order.id, fromStatus: order.status, toStatus: 'CANCELLED', note: reason },
+      });
+      for (const item of order.items) {
+        await tx.productVariant.update({ where: { id: item.productVariantId }, data: { stockQty: { increment: item.quantity } } });
+      }
+      return tx.order.findUniqueOrThrow({ where: { id: order.id }, include: orderDetailInclude });
+    });
+
+    const email = orderCancelledEmail({ orderNumber: updated.orderNumber });
+    void this.emailService.send(updated.email, email.subject, email.html);
+
+    return updated;
   }
 }

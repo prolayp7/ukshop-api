@@ -15,6 +15,29 @@ function memoryTypeForSocket(socket: string): string | null {
   return null;
 }
 
+// Words that carry no search meaning on their own ("laptop with graphics card"
+// should search for laptop/graphics/card, not treat "with" as a required term).
+const SEARCH_STOPWORDS = new Set(['a', 'an', 'the', 'with', 'for', 'and', 'or', 'of', 'in', 'on', 'to', 'is', 'are']);
+const SEARCH_SPEC_PATHS = ['model', 'warranty', 'condition', 'productType', 'catalogueType', 'configuration', 'countryOfSale'];
+
+// Common alternate names for the same product, so a search for one term also
+// tries the others (e.g. product copy says "dedicated graphics", a shopper
+// types "graphics card" — same thing, different words). Lowercase; phrases
+// may be multiple words. Each entry is genuinely interchangeable, not just
+// related, to avoid pulling in a different product type as a false match.
+const SEARCH_SYNONYM_GROUPS: string[][] = [
+  ['graphics card', 'gpu', 'dedicated graphics', 'video card'],
+  ['laptop', 'notebook'],
+  ['motherboard', 'mobo', 'mainboard'],
+  ['memory', 'ram'],
+  ['power supply', 'psu'],
+  ['monitor', 'display', 'screen'],
+  ['cooler', 'cooling', 'aio'],
+  ['case', 'chassis', 'tower'],
+  ['headset', 'headphones'],
+  ['processor', 'cpu'],
+];
+
 function isCompatible(a: ProductCompatibility, b: ProductCompatibility): boolean {
   if (a.socket && b.socket && a.socket !== b.socket) return false;
   const socket = a.socket || b.socket;
@@ -64,6 +87,56 @@ function pricingOf(variants: ListProduct['variants']) {
 export class StorefrontProductsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // Free-text search: each word must match somewhere (title, SEO title, descriptions,
+  // SKU/MPN, brand, or a spec facet like model/warranty/condition) — matching per word
+  // rather than the whole phrase as one substring, so word order and filler words like
+  // "with" don't cause otherwise-relevant products to be missed.
+  private searchConditions(q: string): Prisma.ProductWhereInput[] {
+    const words = q.split(/\s+/).filter(Boolean);
+    const lower = words.map((word) => word.toLowerCase());
+    const consumed = new Array(words.length).fill(false);
+    // Each entry is the set of alternate terms to try for one "slot" in the query —
+    // either a matched synonym group (e.g. "graphics card" → also try gpu, dedicated
+    // graphics, video card) or a single leftover word.
+    const termGroups: string[][] = [];
+
+    for (const group of SEARCH_SYNONYM_GROUPS) {
+      let matched = false;
+      for (const phrase of group) {
+        if (matched) break;
+        const phraseWords = phrase.split(' ');
+        for (let i = 0; i + phraseWords.length <= words.length; i++) {
+          if (consumed[i]) continue;
+          if (lower.slice(i, i + phraseWords.length).join(' ') !== phrase) continue;
+          for (let j = i; j < i + phraseWords.length; j++) consumed[j] = true;
+          termGroups.push(group);
+          matched = true;
+          break;
+        }
+      }
+    }
+    for (let i = 0; i < words.length; i++) {
+      if (consumed[i] || SEARCH_STOPWORDS.has(lower[i])) continue;
+      termGroups.push([words[i]]);
+    }
+    if (!termGroups.length) termGroups.push([q.trim()]);
+
+    return termGroups.map((terms) => ({
+      OR: terms.flatMap((term) => [
+        { title: { contains: term, mode: 'insensitive' as const } },
+        { metaTitle: { contains: term, mode: 'insensitive' as const } },
+        { shortDescription: { contains: term, mode: 'insensitive' as const } },
+        { description: { contains: term, mode: 'insensitive' as const } },
+        { sku: { contains: term, mode: 'insensitive' as const } },
+        { mpn: { contains: term, mode: 'insensitive' as const } },
+        { brand: { title: { contains: term, mode: 'insensitive' as const } } },
+        // JSON path filters don't support Prisma's `mode: 'insensitive'` (Postgres/MySQL
+        // limitation) — these matches are case-sensitive, unlike the string fields above.
+        ...SEARCH_SPEC_PATHS.map((path) => ({ specsSummary: { path: [path], string_contains: term } })),
+      ]),
+    }));
+  }
+
   private buildWhere(query: ListStorefrontProductsQueryDto): Prisma.ProductWhereInput {
     const conditions: Prisma.ProductWhereInput[] = [{ status: 'ACTIVE', deletedAt: null }];
 
@@ -93,13 +166,7 @@ export class StorefrontProductsService {
       }
     }
     if (query.q) {
-      conditions.push({
-        OR: [
-          { title: { contains: query.q, mode: 'insensitive' } },
-          { shortDescription: { contains: query.q, mode: 'insensitive' } },
-          { sku: { contains: query.q, mode: 'insensitive' } },
-        ],
-      });
+      conditions.push(...this.searchConditions(query.q));
     }
     return { AND: conditions };
   }
@@ -318,6 +385,7 @@ export class StorefrontProductsService {
         category: { select: { id: true, title: true, slug: true, parent: { select: { id: true, title: true, slug: true } } } },
         brand: { select: { id: true, title: true, slug: true } },
         compatibility: true,
+        faqs: { orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }], select: { id: true, question: true, answer: true } },
         variants: {
           where: { deletedAt: null, status: 'ACTIVE' },
           include: { attributes: { include: { attribute: true, attributeValue: true } } },
@@ -328,7 +396,7 @@ export class StorefrontProductsService {
     if (!product) throw new NotFoundException('Product not found');
 
     const variantIds = product.variants.map((v) => v.id);
-    const [productMedia, variantMedia, reviewAgg] = await Promise.all([
+    const [productMedia, variantMedia, reviewAgg, ratingCounts] = await Promise.all([
       this.prisma.media.findMany({
         where: { ownerType: 'PRODUCT', ownerId: product.id },
         orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
@@ -344,8 +412,14 @@ export class StorefrontProductsService {
         _avg: { rating: true },
         _count: { rating: true },
       }),
+      this.prisma.review.groupBy({
+        by: ['rating'],
+        where: { productId: product.id, status: 'APPROVED' },
+        _count: { rating: true },
+      }),
     ]);
 
+    const documents = productMedia.filter((m) => /\.(pdf|docx?|csv)(?:[?#]|$)/i.test(m.url));
     const variantMediaByVariant = new Map<number, typeof variantMedia>();
     for (const item of variantMedia) {
       const list = variantMediaByVariant.get(item.ownerId) ?? [];
@@ -355,7 +429,8 @@ export class StorefrontProductsService {
 
     return {
       ...product,
-      images: productMedia.map((m) => ({ url: m.url, altText: m.altText })),
+      documents: documents.map((m) => ({ id: m.id, url: m.url, title: m.altText || (m.metadata as { originalName?: string } | null)?.originalName || "Product document" })),
+      images: productMedia.filter((m) => !documents.includes(m)).map((m) => ({ url: m.url, altText: m.altText })),
       variants: product.variants.map((variant) => ({
         ...variant,
         images: (variantMediaByVariant.get(variant.id) ?? []).map((m) => ({ url: m.url, altText: m.altText })),
@@ -364,6 +439,7 @@ export class StorefrontProductsService {
       reviewSummary: {
         average: reviewAgg._avg.rating ?? 0,
         count: reviewAgg._count.rating,
+        distribution: Object.fromEntries(ratingCounts.map((row) => [row.rating, row._count.rating])),
       },
     };
   }

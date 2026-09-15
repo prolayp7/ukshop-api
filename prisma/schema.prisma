@@ -911,6 +911,14 @@ model OrderItemReturn {
   @@map("order_item_returns")
 }
 
+model NewsletterSubscriber {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("newsletter_subscribers")
+}
+
 model Review {
   id           Int          @id @default(autoincrement())
   uuid         String       @unique @default(uuid())

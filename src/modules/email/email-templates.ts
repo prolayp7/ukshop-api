@@ -43,6 +43,23 @@ export function orderDeliveredEmail(params: { orderNumber: string }) {
   };
 }
 
+export function orderCancelledEmail(params: { orderNumber: string }) {
+  return {
+    subject: `Order cancelled - ${params.orderNumber}`,
+    html: wrap('Order cancelled', `<p>Your order <b>${params.orderNumber}</b> has been cancelled. If you were charged, a refund will be issued back to your original payment method.</p>`),
+  };
+}
+
+export function returnRequestedEmail(params: { orderNumber: string; itemTitle: string }) {
+  return {
+    subject: `Return requested - ${params.orderNumber}`,
+    html: wrap(
+      'Return request received',
+      `<p>We&rsquo;ve received your request to return <b>${params.itemTitle}</b> from order <b>${params.orderNumber}</b>. We&rsquo;ll review it and get back to you shortly.</p>`,
+    ),
+  };
+}
+
 export function orderRefundedEmail(params: { orderNumber: string; refundAmount: string }) {
   return {
     subject: `Refund processed - ${params.orderNumber}`,
