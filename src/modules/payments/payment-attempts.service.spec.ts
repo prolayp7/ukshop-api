@@ -6,14 +6,21 @@ describe('PaymentAttemptsService', () => {
   const dto = { orderUuid: '846fcbd1-e7fc-4d6f-bde2-cadbc24355d5', email: 'buyer@example.com', provider: 'STRIPE' as const };
 
   it('rejects an unconfigured provider before creating an attempt', async () => {
-    const prisma = { setting: { count: jest.fn().mockResolvedValue(0) } };
+    const prisma = { setting: { findUnique: jest.fn().mockResolvedValue(null) } };
     // create() only reaches PaymentStateService/PaypalGatewayService for a
     // PAYPAL attempt (ensurePaypalOrder short-circuits otherwise) - this
     // suite only exercises STRIPE, so undefined stand-ins are never touched.
     const service = new PaymentAttemptsService(prisma as never, undefined as never, undefined as never);
 
     await expect(service.create(dto, 'checkout-session-0001')).rejects.toBeInstanceOf(ServiceUnavailableException);
-    expect(prisma.setting.count).toHaveBeenCalledWith({ where: { key: 'integration.payment.stripe' } });
+    expect(prisma.setting.findUnique).toHaveBeenCalledWith({ where: { key: 'integration.payment.stripe' }, select: { value: true } });
+  });
+
+  it('rejects a configured but disabled provider', async () => {
+    const prisma = { setting: { findUnique: jest.fn().mockResolvedValue({ value: { enabled: false } }) } };
+    const service = new PaymentAttemptsService(prisma as never, undefined as never, undefined as never);
+
+    await expect(service.create(dto, 'checkout-session-0001')).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 
   it('uses the server-side order total and records initial history', async () => {
@@ -37,7 +44,7 @@ describe('PaymentAttemptsService', () => {
       .mockResolvedValueOnce([]);
     const tx = { $queryRaw: jest.fn().mockResolvedValue([attempt]), $executeRaw: jest.fn().mockResolvedValue(1) };
     const prisma = {
-      setting: { count: jest.fn().mockResolvedValue(1) },
+      setting: { findUnique: jest.fn().mockResolvedValue({ value: { enabled: true } }) },
       $queryRaw: rootQuery,
       $transaction: jest.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
     };

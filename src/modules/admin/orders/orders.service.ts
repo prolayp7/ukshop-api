@@ -172,13 +172,15 @@ export class OrdersService {
     if (dto.toStatus === 'SHIPPED') {
       const email = orderShippedEmail({
         orderNumber: updated.orderNumber,
+        orderUuid: updated.uuid,
+        items: updated.items.map((item) => ({ name: item.titleSnapshot, meta: `${item.variantTitleSnapshot} · Qty ${item.quantity}`, price: Number(item.subtotal) })),
         trackingCarrier: updated.trackingCarrier,
         trackingNumber: updated.trackingNumber,
         trackingUrl: updated.trackingUrl,
       });
       void this.emailService.send(updated.email, email.subject, email.html);
     } else if (dto.toStatus === 'DELIVERED') {
-      const email = orderDeliveredEmail({ orderNumber: updated.orderNumber });
+      const email = orderDeliveredEmail({ orderNumber: updated.orderNumber, orderUuid: updated.uuid });
       void this.emailService.send(updated.email, email.subject, email.html);
     }
 

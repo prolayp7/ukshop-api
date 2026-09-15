@@ -27,7 +27,10 @@ export class PaypalGatewayService {
       mode: integration.mode,
       clientId: this.requiredString(integration.settings, 'clientId'),
       clientSecret: this.requiredString(integration.settings, 'clientSecret'),
-      webhookId: this.requiredString(integration.settings, 'webhookId'),
+      // Only needed to verify incoming PayPal webhooks (see
+      // verifyWebhookSignature below) - order creation/capture don't use it,
+      // so an admin can accept payments before setting up a webhook.
+      webhookId: this.optionalString(integration.settings, 'webhookId'),
     };
   }
 
@@ -141,6 +144,11 @@ export class PaypalGatewayService {
     const value = settings[key];
     if (typeof value !== 'string' || !value.trim()) throw new ServiceUnavailableException(`PayPal setting ${key} is not configured`);
     return value;
+  }
+
+  private optionalString(settings: Record<string, unknown>, key: string): string {
+    const value = settings[key];
+    return typeof value === 'string' ? value : '';
   }
 
   private async json<T>(response: Response): Promise<T> {

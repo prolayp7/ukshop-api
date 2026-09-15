@@ -8,9 +8,9 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { UpsertSettingDto } from './dto/upsert-setting.dto';
 import { SaveIntegrationDto } from './dto/integration-settings.dto';
 
-const scopes = ['payment.paypal', 'payment.2checkout', 'payment.stripe', 'delivery.fedex', 'delivery.evri', 'email.smtp'] as const;
+const scopes = ['payment.paypal', 'payment.2checkout', 'payment.stripe', 'payment.skrill', 'delivery.fedex', 'delivery.evri', 'email.smtp'] as const;
 export type IntegrationScope = typeof scopes[number];
-type StoredIntegration = { encrypted: string; iv: string; tag: string; mode: 'SANDBOX' | 'LIVE'; updatedAt: string };
+type StoredIntegration = { encrypted: string; iv: string; tag: string; mode: 'SANDBOX' | 'LIVE'; enabled?: boolean; updatedAt: string };
 
 @Injectable()
 export class SettingsService {
@@ -75,22 +75,22 @@ export class SettingsService {
   async integrationSummaries() {
     const rows = await this.prisma.setting.findMany({ where: { key: { in: scopes.map((scope) => `integration.${scope}`) } } });
     const byKey = new Map(rows.map((row) => [row.key, row.value as unknown as StoredIntegration]));
-    return scopes.map((scope) => { const value = byKey.get(`integration.${scope}`); return { scope, configured: Boolean(value?.encrypted), mode: value?.mode ?? 'SANDBOX', updatedAt: value?.updatedAt ?? null }; });
+    return scopes.map((scope) => { const value = byKey.get(`integration.${scope}`); return { scope, configured: Boolean(value?.encrypted), mode: value?.mode ?? 'SANDBOX', enabled: value?.enabled ?? true, updatedAt: value?.updatedAt ?? null }; });
   }
 
   async integration(adminId: number, scope: string, token?: string) {
     await this.assertUnlock(adminId, scope, token);
     const row = await this.prisma.setting.findUnique({ where: { key: `integration.${scope}` } });
-    if (!row) return { scope, mode: 'SANDBOX', settings: {} };
+    if (!row) return { scope, mode: 'SANDBOX', enabled: true, settings: {} };
     const record = row.value as unknown as StoredIntegration;
-    return { scope, mode: record.mode, settings: this.decrypt(record) };
+    return { scope, mode: record.mode, enabled: record.enabled ?? true, settings: this.decrypt(record) };
   }
 
   async saveIntegration(adminId: number, scope: string, token: string | undefined, dto: SaveIntegrationDto) {
     await this.assertUnlock(adminId, scope, token);
-    const value: StoredIntegration = { ...this.encrypt(dto.settings), mode: dto.mode, updatedAt: new Date().toISOString() };
+    const value: StoredIntegration = { ...this.encrypt(dto.settings), mode: dto.mode, enabled: dto.enabled, updatedAt: new Date().toISOString() };
     await this.prisma.setting.upsert({ where: { key: `integration.${scope}` }, create: { key: `integration.${scope}`, value: value as unknown as Prisma.InputJsonValue }, update: { value: value as unknown as Prisma.InputJsonValue } });
-    return { scope, configured: true, mode: dto.mode, updatedAt: value.updatedAt };
+    return { scope, configured: true, mode: dto.mode, enabled: dto.enabled, updatedAt: value.updatedAt };
   }
 
   async internalIntegration(scope: IntegrationScope) {

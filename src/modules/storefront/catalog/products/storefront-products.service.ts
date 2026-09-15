@@ -261,23 +261,40 @@ export class StorefrontProductsService {
     };
   }
 
+  private static readonly emptyFacets = { specifications: [], categories: [], brands: [], priceMin: null, priceMax: null };
+
   async list(query: ListStorefrontProductsQueryDto) {
     const page = query.page!;
     const perPage = query.perPage!;
     const sort = query.sort ?? 'newest';
+
+    if (query.ids?.length) {
+      const items = await this.attachMedia(await this.fetchProductsByIds(query.ids));
+      return { items, meta: { ...buildPaginationMeta(1, items.length || 1, items.length), facets: StorefrontProductsService.emptyFacets } };
+    }
+
     let where = this.buildWhere(query);
     let priceOrderedIds: number[] | null = null;
-    if (query.priceMin !== undefined || query.priceMax !== undefined || query.onSale || sort === 'price_asc' || sort === 'price_desc') {
+    if (query.priceMin !== undefined || query.priceMax !== undefined || query.onSale || sort === 'price_asc' || sort === 'price_desc' || sort === 'discount_desc') {
       // Use the same primary-variant fallback as card pricing. Fetch full
       // product records only for the requested page, not for this projection.
       const candidates = await this.prisma.product.findMany({ where, select: { id: true, variants: listInclude.variants } });
       const price = (row: (typeof candidates)[number]) => Number(row.variants[0]?.salePrice ?? row.variants[0]?.price ?? 0);
+      const discount = (row: (typeof candidates)[number]) => {
+        const full = Number(row.variants[0]?.price ?? 0);
+        const sale = row.variants[0]?.salePrice !== null && row.variants[0]?.salePrice !== undefined ? Number(row.variants[0].salePrice) : null;
+        return sale !== null && full > 0 ? (full - sale) / full : 0;
+      };
       const matching = candidates.filter((row) => row.variants.length > 0
         && (!query.onSale || row.variants[0].salePrice !== null)
+        && (sort !== 'discount_desc' || row.variants[0].salePrice !== null)
         && (query.priceMin === undefined || price(row) >= query.priceMin)
         && (query.priceMax === undefined || price(row) <= query.priceMax));
       if (sort === 'price_asc' || sort === 'price_desc') {
         matching.sort((a, b) => (sort === 'price_asc' ? price(a) - price(b) : price(b) - price(a)) || a.id - b.id);
+        priceOrderedIds = matching.map((p) => p.id);
+      } else if (sort === 'discount_desc') {
+        matching.sort((a, b) => discount(b) - discount(a) || a.id - b.id);
         priceOrderedIds = matching.map((p) => p.id);
       }
       where = { AND: [where, { id: { in: matching.map((p) => p.id) } }] };

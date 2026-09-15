@@ -7,6 +7,11 @@ import { PaymentStateService } from './payment-state.service';
 import { PaypalGatewayService } from './paypal-gateway.service';
 
 const payableOrderStatuses = ['PENDING', 'AWAITING_PAYMENT', 'FAILED'] as const;
+type StoredIntegrationFlags = { enabled?: boolean };
+
+function settingKeyFor(provider: PaymentProvider): string {
+  return `integration.payment.${provider === 'TWOCHECKOUT' ? '2checkout' : provider.toLowerCase()}`;
+}
 const terminalAttemptStatuses = ['CAPTURED', 'FAILED', 'DECLINED', 'CANCELLED', 'EXPIRED'];
 type OrderRow = { id: number; uuid: string; total: Prisma.Decimal; payment_status: string; status: string };
 type AttemptRow = {
@@ -24,10 +29,9 @@ export class PaymentAttemptsService {
   ) {}
 
   async create(dto: CreatePaymentAttemptDto, idempotencyKey: string) {
-    const configured = await this.prisma.setting.count({
-      where: { key: `integration.payment.${dto.provider === 'TWOCHECKOUT' ? '2checkout' : dto.provider.toLowerCase()}` },
-    });
-    if (!configured) throw new ServiceUnavailableException(`${dto.provider} payments are not configured`);
+    const row = await this.prisma.setting.findUnique({ where: { key: settingKeyFor(dto.provider) }, select: { value: true } });
+    const enabled = Boolean(row) && ((row?.value as unknown as StoredIntegrationFlags)?.enabled ?? true);
+    if (!enabled) throw new ServiceUnavailableException(`${dto.provider} payments are not configured`);
     const [order] = await this.prisma.$queryRaw<OrderRow[]>`
       SELECT id, uuid, total, payment_status, status::text
       FROM orders WHERE uuid = ${dto.orderUuid} AND lower(email) = lower(${dto.email}) LIMIT 1
@@ -217,15 +221,15 @@ export class PaymentAttemptsService {
   }
 
   async methods() {
-    const configured = await this.prisma.setting.findMany({
-      where: { key: { in: ['integration.payment.stripe', 'integration.payment.paypal', 'integration.payment.2checkout'] } },
-      select: { key: true },
+    const rows = await this.prisma.setting.findMany({
+      where: { key: { in: paymentProviders.map(settingKeyFor) } },
+      select: { key: true, value: true },
     });
-    const keys = new Set(configured.map((item) => item.key));
-    return paymentProviders.map((provider) => ({
-      provider,
-      enabled: keys.has(`integration.payment.${provider === 'TWOCHECKOUT' ? '2checkout' : provider.toLowerCase()}`),
-    }));
+    const byKey = new Map(rows.map((row) => [row.key, row.value as unknown as StoredIntegrationFlags]));
+    return paymentProviders.map((provider) => {
+      const stored = byKey.get(settingKeyFor(provider));
+      return { provider, enabled: Boolean(stored) && (stored?.enabled ?? true) };
+    });
   }
 
   private findByIdempotency(provider: PaymentProvider, idempotencyKey: string) {

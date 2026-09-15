@@ -54,9 +54,11 @@ export class OrdersService {
     if (!activeItems.length) throw new BadRequestException('Cart is empty');
 
     let email = dto.email;
+    let customerFirstName = 'there';
     if (customerId) {
       const customer = await this.prisma.user.findUnique({ where: { id: customerId } });
       email = email ?? customer!.email;
+      customerFirstName = customer!.firstName;
     }
     if (!email) throw new BadRequestException('Email is required for guest checkout');
 
@@ -198,8 +200,15 @@ export class OrdersService {
 
     const confirmation = orderConfirmationEmail({
       orderNumber: created.orderNumber,
-      total: total.toFixed(2),
-      itemCount: lines.length,
+      orderUuid: created.uuid,
+      customerFirstName,
+      placedAt: created.placedAt,
+      items: lines.map((l) => ({ name: l.titleSnapshot, meta: `${l.variantTitleSnapshot} · Qty ${l.quantity}`, price: l.subtotal })),
+      subtotal,
+      shipping: shippingCharge,
+      vat: vatTotal,
+      total,
+      address: { fullName: shipping.fullName, line1: shipping.line1, line2: shipping.line2, city: shipping.city, postcode: shipping.postcode },
     });
     void this.emailService.send(email, confirmation.subject, confirmation.html);
 

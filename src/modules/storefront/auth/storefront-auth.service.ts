@@ -7,6 +7,8 @@ import { AuthenticatedCustomer } from '../../../common/customer/customer-request
 import { RegisterDto } from './dto/register.dto';
 import { OtpPurpose } from './dto/otp.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { EmailService } from '../../email/email.service';
+import { emailVerificationEmail, passwordResetEmail, welcomeEmail } from '../../email/email-templates';
 
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -29,6 +31,7 @@ export class StorefrontAuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly emailService: EmailService,
   ) {}
 
   private async issueTokenPair(userId: number): Promise<TokenPair> {
@@ -46,10 +49,6 @@ export class StorefrontAuthService {
     return { accessToken, refreshToken };
   }
 
-  // ponytail: OTP codes are generated and stored but not actually emailed —
-  // no mail transport is wired up yet. Returned in the response outside
-  // production so the flow is testable end to end; wire real delivery
-  // before launch.
   private async issueOtp(email: string, purpose: OtpPurpose): Promise<string> {
     const code = randomInt(0, 1_000_000).toString().padStart(6, '0');
     await this.prisma.otpVerification.create({
@@ -61,6 +60,8 @@ export class StorefrontAuthService {
         expiresAt: new Date(Date.now() + OTP_TTL_MS),
       },
     });
+    const message = purpose === 'password_reset' ? passwordResetEmail({ code }) : emailVerificationEmail({ code });
+    void this.emailService.send(email, message.subject, message.html);
     return code;
   }
 
@@ -83,6 +84,9 @@ export class StorefrontAuthService {
 
     const otp = await this.issueOtp(email, 'email_verification');
     const tokens = await this.issueTokenPair(user.id);
+
+    const welcome = welcomeEmail({ firstName: user.firstName });
+    void this.emailService.send(email, welcome.subject, welcome.html);
 
     return {
       ...tokens,

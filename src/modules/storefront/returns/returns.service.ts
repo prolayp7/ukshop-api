@@ -29,7 +29,7 @@ export class StorefrontReturnsService {
       data: { orderItemId: dto.orderItemId, userId: customerId, reason: dto.reason, comment: dto.comment },
     });
 
-    const email = returnRequestedEmail({ orderNumber: orderItem.order.orderNumber, itemTitle: orderItem.titleSnapshot });
+    const email = returnRequestedEmail({ orderNumber: orderItem.order.orderNumber, itemTitle: orderItem.titleSnapshot, reason: dto.reason });
     void this.emailService.send(orderItem.order.email, email.subject, email.html);
 
     return created;
