@@ -3,6 +3,7 @@ import * as request from 'supertest';
 import { createTestApp } from './setup';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { loginAsSuperAdmin } from './helpers/admin-auth';
+import { registerCustomer } from './helpers/customer-auth';
 
 const PAYPAL_BASE = 'https://api-m.sandbox.paypal.com';
 
@@ -68,11 +69,7 @@ async function createOrderAndPaypalAttempt(app: INestApplication, prisma: Prisma
   const method = await prisma.shippingMethod.findFirst({ where: { status: 'ACTIVE' } });
 
   const email = `${emailPrefix}-${Date.now()}@example.com`;
-  const registerRes = await request(app.getHttpServer())
-    .post('/api/v1/auth/register')
-    .send({ email, password: 'SuperSecret123!', firstName: 'PayPal', lastName: 'Case' })
-    .expect(201);
-  const token = registerRes.body.data.accessToken;
+  const { accessToken: token } = await registerCustomer(app, { email, password: 'SuperSecret123!', firstName: 'PayPal', lastName: 'Case' });
 
   await request(app.getHttpServer())
     .post('/api/v1/cart/items')
@@ -145,7 +142,7 @@ describe('PayPal payments - configured (e2e)', () => {
       .put('/api/v1/admin/settings/integrations/payment.paypal')
       .set('Authorization', `Bearer ${adminToken}`)
       .set('x-settings-unlock', unlockToken)
-      .send({ mode: 'SANDBOX', settings: { clientId: 'sandbox-client-id', clientSecret: 'sandbox-client-secret', webhookId: 'WH-TEST-1' } })
+      .send({ mode: 'SANDBOX', enabled: true, settings: { clientId: 'sandbox-client-id', clientSecret: 'sandbox-client-secret', webhookId: 'WH-TEST-1' } })
       .expect(200);
   });
 
@@ -169,18 +166,15 @@ describe('PayPal payments - configured (e2e)', () => {
     await prisma.productVariant.update({ where: { id: variantId }, data: { stockQty: 20 } });
     const method = await prisma.shippingMethod.findFirst({ where: { status: 'ACTIVE' } });
     const email = `paypal-retry-${Date.now()}@example.com`;
-    const registerRes = await request(app.getHttpServer())
-      .post('/api/v1/auth/register')
-      .send({ email, password: 'SuperSecret123!', firstName: 'Retry', lastName: 'Case' })
-      .expect(201);
+    const { accessToken: retryToken } = await registerCustomer(app, { email, password: 'SuperSecret123!', firstName: 'Retry', lastName: 'Case' });
     await request(app.getHttpServer())
       .post('/api/v1/cart/items')
-      .set('Authorization', `Bearer ${registerRes.body.data.accessToken}`)
+      .set('Authorization', `Bearer ${retryToken}`)
       .send({ productVariantId: variantId, quantity: 1 })
       .expect(201);
     const orderRes = await request(app.getHttpServer())
       .post('/api/v1/orders')
-      .set('Authorization', `Bearer ${registerRes.body.data.accessToken}`)
+      .set('Authorization', `Bearer ${retryToken}`)
       .send({ shippingAddress: { fullName: 'Retry Case', line1: '1 Retry Rd', city: 'Hull', postcode: 'HU1 1AA' }, shippingMethodId: method!.id })
       .expect(201);
     const idempotencyKey = `paypal-retry-${Date.now()}`;

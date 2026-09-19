@@ -4,6 +4,8 @@
 // count grew past "a handful of one-liners". Brand assets/palette match
 // the design system built in ukshop-store/public/emails.
 
+import { formatMoney } from '../../common/currency';
+
 export const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3002';
 const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
@@ -21,7 +23,7 @@ const C = {
 };
 
 function money(n: number): string {
-  return `&pound;${n.toFixed(2)}`;
+  return formatMoney(n);
 }
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -277,10 +279,15 @@ export function orderRefundedEmail(params: { orderNumber: string; refundAmount: 
 /* Account                                                                  */
 /* ------------------------------------------------------------------------ */
 
-export function welcomeEmail(params: { firstName: string }) {
+export function welcomeEmail(params: { firstName: string; code?: string }) {
   let body = contentOpen();
   body += h1(`Welcome to UK Shop, ${esc(params.firstName)}`);
   body += p('Your account is ready. Here&rsquo;s what you get every time you shop with us.');
+  if (params.code) {
+    body += p('<b>Confirm your email address</b> &mdash; enter this code to verify your email and finish setting up your account.', { size: 14, margin: '0 0 12px' });
+    body += otpBlock(params.code);
+    body += p('This code expires in 10 minutes.', { size: 12.5, color: C.faint, margin: '0 0 24px' });
+  }
   body += p('<b>Fast UK delivery</b> &mdash; next-day options on thousands of in-stock lines.', { size: 14, margin: '0 0 10px' });
   body += p('<b>Expert support</b> &mdash; real advice from people who build and repair PCs.', { size: 14, margin: '0 0 10px' });
   body += p('<b>Easy returns</b> &mdash; 30-day returns on almost everything, no fuss.', { size: 14, margin: '0 0 10px' });

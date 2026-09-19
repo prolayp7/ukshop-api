@@ -16,15 +16,14 @@ describe('Storefront Auth (e2e)', () => {
   const email = `customer-${Date.now()}@example.com`;
   const password = 'SuperSecret123!';
 
-  it('registers a new customer and returns tokens', async () => {
+  it('registers a new customer without activating the account', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/v1/auth/register')
       .send({ email, password, firstName: 'Jane', lastName: 'Doe' })
       .expect(201);
 
-    expect(res.body.data.accessToken).toBeDefined();
-    expect(res.body.data.refreshToken).toBeDefined();
-    expect(res.body.data.customer.email).toBe(email);
+    expect(res.body.data.accessToken).toBeUndefined();
+    expect(res.body.data.email).toBe(email);
     expect(res.body.data.otp).toMatch(/^\d{6}$/);
   });
 
@@ -43,13 +42,15 @@ describe('Storefront Auth (e2e)', () => {
     expect(res.body.error.code).toBe('UNAUTHENTICATED');
   });
 
-  it('logs in, verifies email via OTP, fetches /me, updates profile, refreshes, and logs out', async () => {
-    const loginRes = await request(app.getHttpServer())
+  it('blocks login until the email is verified', async () => {
+    const res = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .send({ email, password })
-      .expect(200);
-    const { accessToken, refreshToken } = loginRes.body.data;
+      .expect(403);
+    expect(res.body.error.message).toMatch(/verify your email/i);
+  });
 
+  it('verifies email via OTP, logging the customer in automatically, then fetches /me, updates profile, refreshes, and logs out', async () => {
     const otpRes = await request(app.getHttpServer())
       .post('/api/v1/auth/otp/send')
       .send({ email, purpose: 'email_verification' })
@@ -57,10 +58,14 @@ describe('Storefront Auth (e2e)', () => {
     const otp = otpRes.body.data.otp;
     expect(otp).toMatch(/^\d{6}$/);
 
-    await request(app.getHttpServer())
+    const verifyRes = await request(app.getHttpServer())
       .post('/api/v1/auth/otp/verify')
       .send({ email, purpose: 'email_verification', code: otp })
       .expect(200);
+    const { accessToken, refreshToken } = verifyRes.body.data;
+    expect(accessToken).toBeDefined();
+    expect(refreshToken).toBeDefined();
+    expect(verifyRes.body.data.customer.email).toBe(email);
 
     await request(app.getHttpServer())
       .post('/api/v1/auth/otp/verify')

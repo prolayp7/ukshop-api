@@ -2,6 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
 import { createTestApp } from './setup';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { registerCustomer } from './helpers/customer-auth';
 
 describe('Storefront Checkout (e2e)', () => {
   let app: INestApplication;
@@ -46,11 +47,7 @@ describe('Storefront Checkout (e2e)', () => {
 
   async function registerAndAddToCart(quantity = 1) {
     const email = `checkout-${Date.now()}-${Math.random()}@example.com`;
-    const registerRes = await request(app.getHttpServer())
-      .post('/api/v1/auth/register')
-      .send({ email, password: 'SuperSecret123!', firstName: 'Check', lastName: 'Out' })
-      .expect(201);
-    const accessToken = registerRes.body.data.accessToken;
+    const { accessToken } = await registerCustomer(app, { email, password: 'SuperSecret123!', firstName: 'Check', lastName: 'Out' });
 
     await request(app.getHttpServer())
       .post('/api/v1/cart/items')
@@ -117,14 +114,11 @@ describe('Storefront Checkout (e2e)', () => {
 
   it('rejects checkout with an empty cart', async () => {
     const email = `empty-cart-${Date.now()}@example.com`;
-    const registerRes = await request(app.getHttpServer())
-      .post('/api/v1/auth/register')
-      .send({ email, password: 'SuperSecret123!', firstName: 'Empty', lastName: 'Cart' })
-      .expect(201);
+    const { accessToken } = await registerCustomer(app, { email, password: 'SuperSecret123!', firstName: 'Empty', lastName: 'Cart' });
 
     await request(app.getHttpServer())
       .post('/api/v1/orders')
-      .set('Authorization', `Bearer ${registerRes.body.data.accessToken}`)
+      .set('Authorization', `Bearer ${accessToken}`)
       .send({ shippingAddress: address, shippingMethodId })
       .expect(400);
   });

@@ -2,6 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
 import { createTestApp } from './setup';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { registerCustomer } from './helpers/customer-auth';
 
 describe('Storefront Cart (e2e)', () => {
   let app: INestApplication;
@@ -81,11 +82,7 @@ describe('Storefront Cart (e2e)', () => {
     const guestToken = guestAdd.body.data.guestToken;
 
     const email = `cart-customer-${Date.now()}@example.com`;
-    const registerRes = await request(app.getHttpServer())
-      .post('/api/v1/auth/register')
-      .send({ email, password: 'SuperSecret123!', firstName: 'Cart', lastName: 'Tester' })
-      .expect(201);
-    const accessToken = registerRes.body.data.accessToken;
+    const { accessToken } = await registerCustomer(app, { email, password: 'SuperSecret123!', firstName: 'Cart', lastName: 'Tester' });
 
     await request(app.getHttpServer())
       .post('/api/v1/cart/merge')

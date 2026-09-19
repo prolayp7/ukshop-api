@@ -1,8 +1,11 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
+import { AuditLogsModule } from './modules/admin/audit-logs/audit-logs.module';
+import { AuditModule } from './common/audit/audit.module';
+import { correlationMiddleware } from './common/audit/correlation';
 import { PrismaModule } from './prisma/prisma.module';
 import { AdminCoreModule } from './common/admin/admin-core.module';
 import { AdminAuthModule } from './modules/admin/auth/admin-auth.module';
@@ -65,6 +68,7 @@ import { StorefrontCmsModule } from './modules/storefront/cms/storefront-cms.mod
       }),
     }),
     PrismaModule,
+    AuditModule,
     EmailModule,
     AdminCoreModule,
     AdminAuthModule,
@@ -109,8 +113,13 @@ import { StorefrontCmsModule } from './modules/storefront/cms/storefront-cms.mod
     ReportsModule,
     MediaModule,
     PaymentsModule,
+    AuditLogsModule,
   ],
   controllers: [AppController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(correlationMiddleware).forRoutes('*');
+  }
+}

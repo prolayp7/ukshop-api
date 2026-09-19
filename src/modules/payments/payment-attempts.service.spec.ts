@@ -3,22 +3,22 @@ import { Prisma } from '@prisma/client';
 import { PaymentAttemptsService } from './payment-attempts.service';
 
 describe('PaymentAttemptsService', () => {
-  const dto = { orderUuid: '846fcbd1-e7fc-4d6f-bde2-cadbc24355d5', email: 'buyer@example.com', provider: 'STRIPE' as const };
+  const dto = { orderUuid: '846fcbd1-e7fc-4d6f-bde2-cadbc24355d5', email: 'buyer@example.com', provider: 'TWOCHECKOUT' as const };
 
   it('rejects an unconfigured provider before creating an attempt', async () => {
     const prisma = { setting: { findUnique: jest.fn().mockResolvedValue(null) } };
     // create() only reaches PaymentStateService/PaypalGatewayService for a
-    // PAYPAL attempt (ensurePaypalOrder short-circuits otherwise) - this
-    // suite only exercises STRIPE, so undefined stand-ins are never touched.
-    const service = new PaymentAttemptsService(prisma as never, undefined as never, undefined as never);
+    // PAYPAL attempt (ensureProviderOrder short-circuits otherwise) - this
+    // suite only exercises a gateway-less provider, so undefined stand-ins are never touched.
+    const service = new PaymentAttemptsService(prisma as never, undefined as never, undefined as never, undefined as never, undefined as never);
 
     await expect(service.create(dto, 'checkout-session-0001')).rejects.toBeInstanceOf(ServiceUnavailableException);
-    expect(prisma.setting.findUnique).toHaveBeenCalledWith({ where: { key: 'integration.payment.stripe' }, select: { value: true } });
+    expect(prisma.setting.findUnique).toHaveBeenCalledWith({ where: { key: 'integration.payment.2checkout' }, select: { value: true } });
   });
 
   it('rejects a configured but disabled provider', async () => {
     const prisma = { setting: { findUnique: jest.fn().mockResolvedValue({ value: { enabled: false } }) } };
-    const service = new PaymentAttemptsService(prisma as never, undefined as never, undefined as never);
+    const service = new PaymentAttemptsService(prisma as never, undefined as never, undefined as never, undefined as never, undefined as never);
 
     await expect(service.create(dto, 'checkout-session-0001')).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
@@ -29,7 +29,7 @@ describe('PaymentAttemptsService', () => {
       id: 91,
       uuid: 'a339dc4e-a2ec-4313-832f-97185679860b',
       order_id: 12,
-      provider: 'STRIPE' as const,
+      provider: 'TWOCHECKOUT' as const,
       status: 'CREATED',
       amount: total,
       currency: 'GBP',
@@ -49,9 +49,9 @@ describe('PaymentAttemptsService', () => {
       $transaction: jest.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
     };
     // create() only reaches PaymentStateService/PaypalGatewayService for a
-    // PAYPAL attempt (ensurePaypalOrder short-circuits otherwise) - this
-    // suite only exercises STRIPE, so undefined stand-ins are never touched.
-    const service = new PaymentAttemptsService(prisma as never, undefined as never, undefined as never);
+    // PAYPAL attempt (ensureProviderOrder short-circuits otherwise) - this
+    // suite only exercises a gateway-less provider, so undefined stand-ins are never touched.
+    const service = new PaymentAttemptsService(prisma as never, undefined as never, undefined as never, undefined as never, undefined as never);
 
     const result = await service.create(dto, 'checkout-session-0001');
 

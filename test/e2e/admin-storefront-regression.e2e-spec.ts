@@ -3,6 +3,7 @@ import * as request from 'supertest';
 import { createTestApp } from './setup';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { loginAsSuperAdmin } from './helpers/admin-auth';
+import { registerCustomer } from './helpers/customer-auth';
 
 describe('Storefront order visible and manageable in admin (e2e)', () => {
   let app: INestApplication;
@@ -27,11 +28,7 @@ describe('Storefront order visible and manageable in admin (e2e)', () => {
     const method = await prisma.shippingMethod.findFirst({ where: { status: 'ACTIVE' } });
 
     const email = `regression-${Date.now()}@example.com`;
-    const registerRes = await request(app.getHttpServer())
-      .post('/api/v1/auth/register')
-      .send({ email, password: 'SuperSecret123!', firstName: 'Reg', lastName: 'Ression' })
-      .expect(201);
-    customerToken = registerRes.body.data.accessToken;
+    ({ accessToken: customerToken } = await registerCustomer(app, { email, password: 'SuperSecret123!', firstName: 'Reg', lastName: 'Ression' }));
 
     await request(app.getHttpServer())
       .post('/api/v1/cart/items')
@@ -119,7 +116,7 @@ describe('Storefront order visible and manageable in admin (e2e)', () => {
     await prisma.paymentTransaction.create({
       data: {
         orderId: order.id,
-        provider: 'STRIPE',
+        provider: 'MANUAL', // offline payment: refund is recorded locally, no provider call
         providerTransactionId: `test_txn_${orderUuid}`,
         amount: order.total,
         status: 'CAPTURED',
@@ -147,20 +144,17 @@ describe('Storefront order visible and manageable in admin (e2e)', () => {
       .send({ refundAmount: Number(orderItem.subtotal) })
       .expect(201);
 
-    expect(refundRes.body.data.returnRequest.returnStatus).toBe('RECEIVED');
+    expect(refundRes.body.data.returnRequest.returnStatus).toBe('REFUNDED');
     expect(Number(refundRes.body.data.refund.amount)).toBeCloseTo(Number(orderItem.subtotal), 2);
   });
 
   it('does not leak this order to another customer', async () => {
     const otherEmail = `regression-other-${Date.now()}@example.com`;
-    const otherRes = await request(app.getHttpServer())
-      .post('/api/v1/auth/register')
-      .send({ email: otherEmail, password: 'SuperSecret123!', firstName: 'Other', lastName: 'Customer' })
-      .expect(201);
+    const other = await registerCustomer(app, { email: otherEmail, password: 'SuperSecret123!', firstName: 'Other', lastName: 'Customer' });
 
     await request(app.getHttpServer())
       .get(`/api/v1/orders/${orderUuid}`)
-      .set('Authorization', `Bearer ${otherRes.body.data.accessToken}`)
+      .set('Authorization', `Bearer ${other.accessToken}`)
       .expect(404);
   });
 });
