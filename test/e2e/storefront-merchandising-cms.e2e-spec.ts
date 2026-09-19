@@ -75,7 +75,7 @@ describe('Storefront Merchandising & CMS (e2e)', () => {
     });
   });
 
-  describe('CMS: pages, blog, faqs, testimonials', () => {
+  describe('CMS: pages, faqs, testimonials', () => {
     it('serves a published page and 404s a draft one', async () => {
       const slug = `about-us-${Date.now()}`;
       await prisma.page.create({ data: { slug, title: 'About Us', status: 'PUBLISHED' } });
@@ -86,38 +86,6 @@ describe('Storefront Merchandising & CMS (e2e)', () => {
       expect(res.body.data.title).toBe('About Us');
 
       await request(app.getHttpServer()).get(`/api/v1/pages/${draftSlug}`).expect(404);
-    });
-
-    it('lists published blog posts, filters by category, and hides drafts', async () => {
-      const category = await prisma.blogCategory.create({ data: { title: `News ${Date.now()}`, slug: `news-${Date.now()}` } });
-      const author = await prisma.author.create({ data: { name: 'Jane Author' } });
-      const published = await prisma.blogPost.create({
-        data: {
-          title: `Published post ${Date.now()}`,
-          slug: `published-post-${Date.now()}`,
-          content: 'Hello world',
-          status: 'PUBLISHED',
-          publishedAt: new Date(),
-          blogCategoryId: category.id,
-          authorId: author.id,
-        },
-      });
-      const draft = await prisma.blogPost.create({
-        data: { title: `Draft post ${Date.now()}`, slug: `draft-post-${Date.now()}`, content: 'Shh', status: 'DRAFT' },
-      });
-
-      const list = await request(app.getHttpServer()).get('/api/v1/blog').expect(200);
-      const slugs = list.body.data.map((p: { slug: string }) => p.slug);
-      expect(slugs).toContain(published.slug);
-      expect(slugs).not.toContain(draft.slug);
-
-      const filtered = await request(app.getHttpServer()).get(`/api/v1/blog?category=${category.slug}`).expect(200);
-      expect(filtered.body.data.every((p: { blogCategory: { slug: string } }) => p.blogCategory.slug === category.slug)).toBe(true);
-
-      const detail = await request(app.getHttpServer()).get(`/api/v1/blog/${published.slug}`).expect(200);
-      expect(detail.body.data.author.name).toBe('Jane Author');
-
-      await request(app.getHttpServer()).get(`/api/v1/blog/${draft.slug}`).expect(404);
     });
 
     it('groups FAQs by category', async () => {

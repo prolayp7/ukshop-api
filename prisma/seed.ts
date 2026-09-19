@@ -433,7 +433,6 @@ async function main() {
         { type: 'BRANDS', label: 'Shop by brand', sortOrder: 5 },
         { type: 'BANNERS', label: 'Promotional banners', sortOrder: 6, config: { position: 'home-top' } },
         { type: 'TESTIMONIALS', label: 'Customer testimonials', sortOrder: 7 },
-        { type: 'BLOG_HIGHLIGHTS', label: 'Latest from the blog', sortOrder: 8 },
         { type: 'FAQS', label: 'Frequently asked questions', sortOrder: 9 },
         { type: 'NEWSLETTER', label: 'Newsletter signup', sortOrder: 10, config: { heading: 'Get restock alerts & deal notifications', body: 'One email a week, mostly about stock drops and price cuts. No spam.' } },
       ],
@@ -451,41 +450,7 @@ async function main() {
   await findOrCreateHomepageSection('BUYING_GUIDES', { label: 'Buying guides', sortOrder: 15 });
   await findOrCreateHomepageSection('SEO_INTRO', { label: 'SEO intro & special offer', sortOrder: 16 });
 
-  // Blog & static CMS pages - demo content for the storefront's content pages.
-  const blogCategory = await prisma.blogCategory.upsert({
-    where: { slug: 'buying-guides' },
-    update: {},
-    create: { title: 'Buying Guides', slug: 'buying-guides' },
-  });
-  const author = await prisma.author.findFirst({ where: { name: 'UK Computer Shop Team' } }).then((existing) =>
-    existing ?? prisma.author.create({ data: { name: 'UK Computer Shop Team', role: 'Editorial' } }),
-  );
-  const findOrCreateBlogPost = (slug: string, create: Parameters<typeof prisma.blogPost.create>[0]['data']) =>
-    prisma.blogPost.findFirst({ where: { slug } }).then((existing) => existing ?? prisma.blogPost.create({ data: create }));
-  await findOrCreateBlogPost('choosing-your-first-graphics-card', {
-    title: 'Choosing your first graphics card',
-    slug: 'choosing-your-first-graphics-card',
-    excerpt: 'A plain-English guide to VRAM, wattage and what actually matters for 1080p and 1440p gaming.',
-    content:
-      'Picking a graphics card can feel overwhelming with so many model numbers and marketing terms flying around. Start with your monitor: its resolution and refresh rate tell you roughly how much GPU power you need.\n\nFor 1080p at 60Hz, a mid-range card is plenty. For 1440p or high-refresh gaming, look at cards with more VRAM and a higher power draw - just make sure your power supply can keep up.\n\nCheck the recommended PSU wattage on the product page before you buy, and use our compatibility checks on the product page to confirm your case and power supply will work together.',
-    blogCategoryId: blogCategory.id,
-    authorId: author.id,
-    status: 'PUBLISHED',
-    publishedAt: new Date(),
-    isFeatured: true,
-  });
-  await findOrCreateBlogPost('building-a-quiet-pc', {
-    title: 'Building a quiet PC without sacrificing performance',
-    slug: 'building-a-quiet-pc',
-    excerpt: 'Case airflow, fan curves and cooler choice - the three things that actually determine how loud your PC is.',
-    content:
-      'A quiet PC comes down to three things: case airflow, fan quality, and how hard your components have to work to stay cool.\n\nStart with a case that has good airflow rather than the most RGB. Pair it with larger, slower-spinning fans rather than small fast ones - bigger fans move the same air at a lower pitch.\n\nFinally, a well-sized cooler for your CPU means your fans rarely need to spin up in the first place.',
-    blogCategoryId: blogCategory.id,
-    authorId: author.id,
-    status: 'PUBLISHED',
-    publishedAt: new Date(),
-  });
-
+  // Static CMS pages - demo content for the storefront's content pages.
   const findOrCreatePage = (slug: string, create: Parameters<typeof prisma.page.create>[0]['data']) =>
     prisma.page.findFirst({ where: { slug } }).then((existing) => existing ?? prisma.page.create({ data: create }));
   await findOrCreatePage('about-us', {
