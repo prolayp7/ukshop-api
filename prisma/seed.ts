@@ -366,6 +366,29 @@ async function main() {
     });
   }
 
+  // Footer menu - link columns, admin-editable (column titles are top-level
+  // items, their links are child items). Only created when missing so admin
+  // edits survive re-seeding.
+  const footerMenu = await prisma.menu.upsert({
+    where: { slug: 'footer' },
+    update: {},
+    create: { name: 'Footer', slug: 'footer', location: 'FOOTER' },
+  });
+  if ((await prisma.menuItem.count({ where: { menuId: footerMenu.id } })) === 0) {
+    const footerColumns: { title: string; links: { label: string; href: string }[] }[] = [
+    { title: 'Shop', links: [{ label: 'PC Components', href: '/category?cat=PC%20Components' }, { label: 'Computers', href: '/category?cat=Computers' }, { label: 'Laptops', href: '/category?cat=Laptops' }, { label: 'Peripherals', href: '/category?cat=Peripherals' }, { label: 'Networking', href: '/category?cat=Networking' }, { label: 'Accessories', href: '/category?cat=Accessories' }, { label: 'Deals', href: '/category?deals=1' }] },
+    { title: 'Customer Service', links: [{ label: 'Track my order', href: '/account?tab=orders' }, { label: 'Warranty & RMA', href: '/account?tab=orders' }, { label: 'FAQs', href: '/faqs' }] },
+    { title: 'Company', links: [{ label: 'About us', href: '/pages/about-us' }, { label: 'Reviews', href: '/testimonials' }, { label: 'All brands', href: '/brands' }] },
+    { title: 'Resources', links: [{ label: 'Compare products', href: '/compare' }] },
+    ];
+    for (const [columnIndex, column] of footerColumns.entries()) {
+      const parent = await prisma.menuItem.create({ data: { menuId: footerMenu.id, label: column.title, sortOrder: columnIndex + 1 } });
+      for (const [linkIndex, link] of column.links.entries()) {
+        await prisma.menuItem.create({ data: { menuId: footerMenu.id, parentId: parent.id, label: link.label, href: link.href, sortOrder: linkIndex + 1 } });
+      }
+    }
+  }
+
   // Homepage merchandising - demo content so the storefront home page has
   // something real to render (Day 6 will replace this with production content
   // entered through the admin panel).
