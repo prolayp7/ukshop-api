@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { promises as fs } from 'fs';
 import { basename, join } from 'path';
 import { randomBytes } from 'crypto';
@@ -22,7 +22,7 @@ const CANCELLABLE_STATUSES = ['PENDING', 'AWAITING_PAYMENT', 'PROCESSING'];
 
 const orderDetailInclude = {
   invoice: true,
-  items: { include: { returns: { select: { id: true, returnStatus: true } } } },
+  items: { include: { returnItems: { select: { quantity: true, approvedQuantity: true, receivedQuantity: true, acceptedQuantity: true, inspectionResult: true, returnRequest: { select: { returnNumber: true, status: true } } } } } },
   shippingMethod: { select: { id: true, title: true, carrier: true } },
   shipments: { include: { events: { orderBy: { occurredAt: 'desc' as const } } } },
   statusHistory: { orderBy: { createdAt: 'asc' as const } },
@@ -34,6 +34,8 @@ function round2(value: number): number {
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly cartService: CartService,
@@ -72,11 +74,9 @@ export class OrdersService {
     if (!activeItems.length) throw new BadRequestException('Cart is empty');
 
     let email = dto.email;
-    let customerFirstName = 'there';
     if (customerId) {
-      const customer = await this.prisma.user.findUnique({ where: { id: customerId } });
+      const customer = await this.prisma.user.findUnique({ where: { id: customerId }, select: { email: true } });
       email = email ?? customer!.email;
-      customerFirstName = customer!.firstName;
     }
     if (!email) throw new BadRequestException('Email is required for guest checkout');
 
@@ -227,22 +227,37 @@ export class OrdersService {
     });
     if (!created) return this.findByUuid((await this.prisma.order.findUniqueOrThrow({ where: { checkoutKey: idempotencyKey } })).uuid);
 
-    const confirmation = orderConfirmationEmail({
-      orderNumber: created.orderNumber,
-      orderUuid: created.uuid,
-      customerFirstName,
-      placedAt: created.placedAt,
-      items: lines.map((l) => ({ name: l.titleSnapshot, meta: `${l.variantTitleSnapshot} · Qty ${l.quantity}`, price: l.subtotal })),
-      subtotal,
-      shipping: shippingCharge,
-      vat: vatTotal,
-      total,
-      address: { fullName: shipping.fullName, line1: shipping.line1, line2: shipping.line2, city: shipping.city, postcode: shipping.postcode },
-    });
-    void this.emailService.send(email, confirmation.subject, confirmation.html);
     for (const item of activeItems) void this.lowStockAlert.checkAndNotify(item.productVariantId);
 
     return this.findByUuid(created.uuid);
+  }
+
+  async sendPaidOrderConfirmation(orderId: number): Promise<void> {
+    try {
+      const order = await this.prisma.order.findUnique({ where: { id: orderId }, include: orderDetailInclude });
+      if (!order || order.paymentStatus !== 'PAID' || !order.invoice) return;
+
+      const customer = order.userId
+        ? await this.prisma.user.findUnique({ where: { id: order.userId }, select: { firstName: true } })
+        : null;
+      const firstName = customer?.firstName || order.shippingFullName.trim().split(/\s+/)[0] || 'there';
+      const confirmation = orderConfirmationEmail({
+        orderNumber: order.orderNumber,
+        orderUuid: order.uuid,
+        customerFirstName: firstName,
+        placedAt: order.placedAt,
+        items: order.items.map((item) => ({ name: item.titleSnapshot, meta: `${item.variantTitleSnapshot} · Qty ${item.quantity}`, price: Number(item.subtotal) })),
+        subtotal: Number(order.subtotal),
+        shipping: Number(order.shippingCharge),
+        vat: Number(order.vatTotal),
+        total: Number(order.total),
+        address: { fullName: order.shippingFullName, line1: order.shippingLine1, line2: order.shippingLine2, city: order.shippingCity, postcode: order.shippingPostcode },
+      });
+      const invoice = await this.renderInvoice(order);
+      await this.emailService.send(order.email, confirmation.subject, confirmation.html, [{ filename: invoice.filename, content: invoice.buffer, contentType: 'application/pdf' }]);
+    } catch (error) {
+      this.logger.warn(`Paid order confirmation could not be prepared for order ${orderId}: ${(error as Error).message}`);
+    }
   }
 
   async list(customerId: number, query: PaginationQueryDto) {
@@ -263,7 +278,10 @@ export class OrdersService {
 
   /** Renders the invoice PDF on demand - only for orders that have been paid. */
   async invoicePdf(customerId: number, uuid: string): Promise<{ buffer: Buffer; filename: string }> {
-    const order = await this.detail(customerId, uuid);
+    return this.renderInvoice(await this.detail(customerId, uuid));
+  }
+
+  private async renderInvoice(order: Awaited<ReturnType<OrdersService['findByUuid']>>): Promise<{ buffer: Buffer; filename: string }> {
     if (!order.invoice) throw new ConflictException('An invoice is available once the order has been paid');
 
     const row = await this.prisma.setting.findUnique({ where: { key: 'general.site' } });
