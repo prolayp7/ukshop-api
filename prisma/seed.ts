@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { seedProducts } from './seed-products';
 import { seedHeaderMenu } from './seed-header-menu';
+import { seedLegalPages } from './seed-legal-pages';
 
 const prisma = new PrismaClient();
 
@@ -473,6 +474,9 @@ async function main() {
     status: 'PUBLISHED',
     contentBlocks: 'We are an independent UK retailer based in Manchester, building and shipping PCs and components since day one.\n\nOur warehouse and workshop are open Monday to Saturday, and our team tests every custom build before it ships.',
   });
+
+  // Legal pages (drafts, filled from Settings) + an inactive Legal footer column.
+  for (const note of await seedLegalPages(prisma)) console.log(note);
 
   const deliveryFaqCategory = await prisma.faqCategory.findFirst({ where: { name: 'Delivery & Returns' } }).then((existing) =>
     existing ?? prisma.faqCategory.create({ data: { name: 'Delivery & Returns', sortOrder: 1 } }),

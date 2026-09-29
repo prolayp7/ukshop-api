@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes, randomInt } from 'crypto';
@@ -8,7 +9,7 @@ import { RegisterDto } from './dto/register.dto';
 import { OtpPurpose } from './dto/otp.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { EmailService } from '../../email/email.service';
-import { emailVerificationEmail, passwordResetEmail, welcomeEmail } from '../../email/email-templates';
+import { accountDeletionRequestReceivedEmail, emailVerificationEmail, passwordResetEmail, welcomeEmail } from '../../email/email-templates';
 
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -22,8 +23,8 @@ function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
-function toAuthenticatedCustomer(user: { id: number; uuid: string; email: string; firstName: string; lastName: string }): AuthenticatedCustomer {
-  return { id: user.id, uuid: user.uuid, email: user.email, firstName: user.firstName, lastName: user.lastName };
+function toAuthenticatedCustomer(user: { id: number; uuid: string; email: string; firstName: string; lastName: string; phone: string | null }): AuthenticatedCustomer {
+  return { id: user.id, uuid: user.uuid, email: user.email, firstName: user.firstName, lastName: user.lastName, phone: user.phone };
 }
 
 @Injectable()
@@ -79,16 +80,29 @@ export class StorefrontAuthService {
 
     // Suspended until the account is verified - by the customer entering the
     // emailed code (verifyOtp() flips this to ACTIVE) or by an admin.
-    const user = await this.prisma.user.create({
-      data: {
-        email,
-        passwordHash: await bcrypt.hash(dto.password, 10),
-        firstName: dto.firstName.trim(),
-        lastName: dto.lastName.trim(),
-        phone: dto.phone,
-        status: 'SUSPENDED',
-      },
-    });
+    let user;
+    try {
+      user = await this.prisma.user.create({
+        data: {
+          email,
+          passwordHash: await bcrypt.hash(dto.password, 10),
+          firstName: dto.firstName.trim(),
+          lastName: dto.lastName.trim(),
+          phone: dto.phone,
+          status: 'SUSPENDED',
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const target = Array.isArray(error.meta?.target)
+          ? error.meta.target.join(',').toLowerCase()
+          : String(error.meta?.target ?? '').toLowerCase();
+        if (target.includes('phone')) throw new ConflictException('An account with that phone number already exists');
+        if (target.includes('email')) throw new ConflictException('An account with that email already exists');
+        throw new ConflictException('An account with those details already exists');
+      }
+      throw error;
+    }
 
     // The verification code rides along in the welcome email rather than a
     // separate one - createOtp() only writes the record, it doesn't send.
@@ -101,6 +115,33 @@ export class StorefrontAuthService {
       email,
       ...(process.env.NODE_ENV !== 'production' ? { otp } : {}),
     };
+  }
+
+  async deletionRequestFor(userId: number) {
+    return this.prisma.customerDeletionRequest.findFirst({
+      where: { userId, status: 'PENDING' },
+      orderBy: { requestedAt: 'desc' },
+      select: { id: true, status: true, requestedAt: true },
+    });
+  }
+
+  async requestAccountDeletion(userId: number) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
+      select: { email: true, firstName: true },
+    });
+    if (!user) throw new UnauthorizedException('Account not found');
+
+    const existing = await this.deletionRequestFor(userId);
+    if (existing) return { request: existing, alreadyRequested: true, emailSent: null };
+
+    const request = await this.prisma.customerDeletionRequest.create({
+      data: { userId },
+      select: { id: true, status: true, requestedAt: true },
+    });
+    const email = accountDeletionRequestReceivedEmail({ firstName: user.firstName });
+    const emailSent = await this.emailService.send(user.email, email.subject, email.html);
+    return { request, alreadyRequested: false, emailSent };
   }
 
   async login(email: string, password: string): Promise<TokenPair & { customer: AuthenticatedCustomer }> {

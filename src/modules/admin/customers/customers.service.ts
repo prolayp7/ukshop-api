@@ -1,13 +1,15 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { EmailService } from '../../email/email.service';
+import { accountDeletedEmail } from '../../email/email-templates';
 import { buildPaginationMeta, paginationSkipTake } from '../../../common/pagination';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { ListCustomersQueryDto } from './dto/list-customers-query.dto';
 
 @Injectable()
 export class CustomersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly email: EmailService) {}
 
   async list(query: ListCustomersQueryDto) {
     const page = query.page!;
@@ -43,6 +45,7 @@ export class CustomersService {
       ] } : {}),
       ...(query.segment === 'POTENTIAL' ? { orders: { none: { paymentStatus: { in: [...settledStatuses] } } } } : {}),
       ...(query.segment === 'FIRST_TIME' || query.segment === 'RETURNING' ? { id: { in: segmentUserIds } } : {}),
+      ...(query.deletionRequested === 'true' ? { deletionRequests: { some: { status: 'PENDING' } } } : {}),
     };
     const [items, total] = await Promise.all([
       this.prisma.user.findMany({
@@ -61,6 +64,7 @@ export class CustomersService {
           createdAt: true,
           _count: { select: { orders: true } },
           orders: { select: { placedAt: true }, orderBy: { placedAt: 'desc' as const }, take: 1 },
+          deletionRequests: { where: { status: 'PENDING' }, orderBy: { requestedAt: 'desc' }, take: 1, select: { id: true, requestedAt: true } },
         },
       }),
       this.prisma.user.count({ where }),
@@ -74,11 +78,12 @@ export class CustomersService {
     }) : [];
     const salesByCustomer = new Map(sales.map((row) => [row.userId, { totalSpend: Number(row._sum.total ?? 0), settledOrderCount: row._count._all }]));
     return {
-      items: items.map(({ orders, ...item }) => {
+      items: items.map(({ orders, deletionRequests, ...item }) => {
         const purchase = salesByCustomer.get(item.id);
         const settledOrderCount = purchase?.settledOrderCount ?? 0;
         return {
           ...item,
+          deletionRequest: deletionRequests[0] ?? null,
           totalSpend: purchase?.totalSpend ?? 0,
           settledOrderCount,
           customerSegment: settledOrderCount >= 2 ? 'RETURNING' : settledOrderCount === 1 ? 'FIRST_TIME' : 'POTENTIAL',
@@ -122,11 +127,15 @@ export class CustomersService {
   async detail(id: number) {
     const user = await this.prisma.user.findFirst({
       where: { id, deletedAt: null },
-      include: { addresses: true, _count: { select: { orders: true, reviews: true } } },
+      include: {
+        addresses: true,
+        _count: { select: { orders: true, reviews: true } },
+        deletionRequests: { where: { status: 'PENDING' }, orderBy: { requestedAt: 'desc' }, take: 1, select: { id: true, requestedAt: true } },
+      },
     });
     if (!user) throw new NotFoundException('Customer not found');
-    const { passwordHash: _passwordHash, ...safe } = user;
-    return safe;
+    const { passwordHash: _passwordHash, deletionRequests, ...safe } = user;
+    return { ...safe, deletionRequest: deletionRequests[0] ?? null };
   }
 
   async update(id: number, dto: UpdateCustomerDto) {
@@ -137,8 +146,23 @@ export class CustomersService {
   }
 
   async remove(id: number): Promise<void> {
-    await this.detail(id);
-    await this.prisma.user.update({ where: { id }, data: { deletedAt: new Date() } });
+    const customer = await this.detail(id);
+    const request = customer.deletionRequest;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id }, data: { deletedAt: new Date() } });
+      await tx.customerRefreshToken.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
+      if (request) {
+        const result = await tx.customerDeletionRequest.updateMany({
+          where: { id: request.id, status: 'PENDING' },
+          data: { status: 'COMPLETED', processedAt: new Date() },
+        });
+        if (!result.count) throw new ConflictException('This account deletion request has already been processed');
+      }
+    });
+    if (request) {
+      const email = accountDeletedEmail({ firstName: customer.firstName });
+      await this.email.send(customer.email, email.subject, email.html);
+    }
   }
 
   async orders(id: number, page: number, perPage: number) {

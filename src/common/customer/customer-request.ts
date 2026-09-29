@@ -6,6 +6,7 @@ export interface AuthenticatedCustomer {
   email: string;
   firstName: string;
   lastName: string;
+  phone?: string | null;
 }
 
 export interface CustomerRequest extends Request {

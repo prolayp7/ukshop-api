@@ -8,4 +8,5 @@ export class ListCustomersQueryDto extends PaginationQueryDto {
   @IsOptional() @IsDateString() dateFrom?: string;
   @IsOptional() @IsDateString() dateTo?: string;
   @IsOptional() @IsIn(['POTENTIAL', 'FIRST_TIME', 'RETURNING']) segment?: 'POTENTIAL' | 'FIRST_TIME' | 'RETURNING';
+  @IsOptional() @IsIn(['true']) deletionRequested?: 'true';
 }

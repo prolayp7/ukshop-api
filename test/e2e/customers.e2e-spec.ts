@@ -26,6 +26,7 @@ describe('Admin Customers (e2e)', () => {
   });
 
   afterAll(async () => {
+    if (customerId) await prisma.customerDeletionRequest.deleteMany({ where: { userId: customerId } });
     if (customerId) await prisma.user.delete({ where: { id: customerId } });
     await app.close();
   });
@@ -46,6 +47,24 @@ describe('Admin Customers (e2e)', () => {
     expect(
       res.body.data.some((c: { id: number }) => c.id === customerId),
     ).toBe(true);
+  });
+
+  it('lists customers with pending deletion requests when filtered', async () => {
+    await prisma.customerDeletionRequest.create({ data: { userId: customerId } });
+
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/admin/customers?deletionRequested=true')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(res.body.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: customerId,
+          deletionRequest: expect.objectContaining({ id: expect.any(Number) }),
+        }),
+      ]),
+    );
   });
 
   it('fetches, updates, and suspends a customer', async () => {
