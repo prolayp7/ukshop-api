@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { seedProducts } from './seed-products';
+import { seedHeaderMenu } from './seed-header-menu';
 
 const prisma = new PrismaClient();
 
@@ -351,20 +352,8 @@ async function main() {
     create: { key: 'allowed_shipping_countries', value: ['GB'] },
   });
 
-  // Header menu
-  const headerMenu = await prisma.menu.upsert({
-    where: { slug: 'header' },
-    update: {},
-    create: { name: 'Header', slug: 'header', location: 'HEADER' },
-  });
-  const existingComponentsItem = await prisma.menuItem.findFirst({
-    where: { menuId: headerMenu.id, label: 'PC Components' },
-  });
-  if (!existingComponentsItem) {
-    await prisma.menuItem.create({
-      data: { menuId: headerMenu.id, label: 'PC Components', categoryId: pcComponents.id, sortOrder: 1 },
-    });
-  }
+  // Header menu - the storefront's top navigation with its mega-menu panels (admin-editable).
+  for (const note of await seedHeaderMenu(prisma)) console.log(note);
 
   // Footer menu - link columns, admin-editable (column titles are top-level
   // items, their links are child items). Only created when missing so admin
@@ -375,8 +364,9 @@ async function main() {
     create: { name: 'Footer', slug: 'footer', location: 'FOOTER' },
   });
   if ((await prisma.menuItem.count({ where: { menuId: footerMenu.id } })) === 0) {
-    const footerColumns: { title: string; links: { label: string; href: string }[] }[] = [
-    { title: 'Shop', links: [{ label: 'PC Components', href: '/category?cat=PC%20Components' }, { label: 'Computers', href: '/category?cat=Computers' }, { label: 'Laptops', href: '/category?cat=Laptops' }, { label: 'Peripherals', href: '/category?cat=Peripherals' }, { label: 'Networking', href: '/category?cat=Networking' }, { label: 'Accessories', href: '/category?cat=Accessories' }, { label: 'Deals', href: '/category?deals=1' }] },
+    // Department links are category links, so the storefront renders their canonical /category/<slug> URL.
+    const footerColumns: { title: string; links: { label: string; href?: string; category?: string }[] }[] = [
+    { title: 'Shop', links: [...['PC Components', 'Computers', 'Laptops', 'Peripherals', 'Networking', 'Software'].map((title) => ({ label: title, category: title })), { label: 'Deals', href: '/deals' }] },
     { title: 'Customer Service', links: [{ label: 'Track my order', href: '/account?tab=orders' }, { label: 'Warranty & RMA', href: '/account?tab=orders' }, { label: 'FAQs', href: '/faqs' }] },
     { title: 'Company', links: [{ label: 'About us', href: '/pages/about-us' }, { label: 'Reviews', href: '/testimonials' }, { label: 'All brands', href: '/brands' }] },
     { title: 'Resources', links: [{ label: 'Compare products', href: '/compare' }] },
@@ -384,7 +374,8 @@ async function main() {
     for (const [columnIndex, column] of footerColumns.entries()) {
       const parent = await prisma.menuItem.create({ data: { menuId: footerMenu.id, label: column.title, sortOrder: columnIndex + 1 } });
       for (const [linkIndex, link] of column.links.entries()) {
-        await prisma.menuItem.create({ data: { menuId: footerMenu.id, parentId: parent.id, label: link.label, href: link.href, sortOrder: linkIndex + 1 } });
+        const category = link.category ? await prisma.category.findFirst({ where: { title: link.category, deletedAt: null }, select: { id: true } }) : null;
+        await prisma.menuItem.create({ data: { menuId: footerMenu.id, parentId: parent.id, label: link.label, href: link.href ?? null, categoryId: category?.id ?? null, sortOrder: linkIndex + 1 } });
       }
     }
   }

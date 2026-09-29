@@ -287,6 +287,7 @@ model Category {
   secondaryProducts CategoryProduct[]
   menuItems         MenuItem[]
   megaMenuLinks     MegaMenuLink[]
+  megaMenuPromos    MegaMenuPanel[] @relation("MegaMenuPromoCategory")
   featuredSections  FeaturedSection[]
   banners           Banner[]
   faqs              CategoryFaq[]
@@ -1218,6 +1219,11 @@ enum MenuLocation {
   FOOTER
 }
 
+enum MegaMenuMode {
+  AUTO
+  CUSTOM
+}
+
 model Coupon {
   id                Int           @id @default(autoincrement())
   code              String
@@ -1434,6 +1440,9 @@ model MenuItem {
   category   Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   sortOrder  Int           @default(0) @map("sort_order")
   status     CatalogStatus @default(ACTIVE)
+  // Header navigation only: storefront sprite icon id (e.g. "i-gpu") and the red "hot" style.
+  icon       String?
+  highlight  Boolean       @default(false)
 
   megaMenuPanel MegaMenuPanel?
 
@@ -1444,10 +1453,23 @@ model MenuItem {
 }
 
 model MegaMenuPanel {
-  id         Int      @id @default(autoincrement())
-  menuItemId Int      @unique @map("menu_item_id")
-  menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
-  sortOrder  Int      @default(0) @map("sort_order")
+  id         Int          @id @default(autoincrement())
+  menuItemId Int          @unique @map("menu_item_id")
+  menuItem   MenuItem     @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  sortOrder  Int          @default(0) @map("sort_order")
+  // AUTO builds the columns from the item's category children on the storefront; CUSTOM uses `columns`.
+  mode       MegaMenuMode @default(CUSTOM)
+  // Small label above the panel title, e.g. "Shop department".
+  eyebrow    String?
+
+  // Optional "Featured" card beside the columns; links to a category or a URL.
+  promoEnabled    Boolean   @default(false) @map("promo_enabled")
+  promoTitle      String?   @map("promo_title")
+  promoText       String?   @map("promo_text")
+  promoCta        String?   @map("promo_cta")
+  promoHref       String?   @map("promo_href")
+  promoCategoryId Int?      @map("promo_category_id")
+  promoCategory   Category? @relation("MegaMenuPromoCategory", fields: [promoCategoryId], references: [id], onDelete: SetNull)
 
   columns MegaMenuColumn[]
 

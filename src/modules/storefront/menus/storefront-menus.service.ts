@@ -17,7 +17,26 @@ export class StorefrontMenusService {
             label: true,
             href: true,
             sortOrder: true,
-            category: { select: { id: true, title: true, slug: true } },
+            icon: true,
+            highlight: true,
+            category: { select: { id: true, title: true, slug: true, parentId: true } },
+            // Header mega-menu content; footer items have none.
+            megaMenuPanel: {
+              select: {
+                mode: true,
+                eyebrow: true,
+                promoEnabled: true,
+                promoTitle: true,
+                promoText: true,
+                promoCta: true,
+                promoHref: true,
+                promoCategory: { select: { title: true, slug: true, parentId: true } },
+                columns: {
+                  orderBy: { sortOrder: 'asc' },
+                  select: { title: true, links: { orderBy: { sortOrder: 'asc' }, select: { label: true, href: true, category: { select: { title: true, slug: true, parentId: true } } } } },
+                },
+              },
+            },
             children: {
               where: { status: 'ACTIVE' },
               orderBy: { sortOrder: 'asc' },

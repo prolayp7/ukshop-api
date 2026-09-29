@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { withSectionText } from '../../../common/homepage-section-content';
 import { StorefrontProductsService } from '../catalog/products/storefront-products.service';
 
 const FEATURED_SECTION_PRODUCT_LIMIT = 12;
@@ -68,7 +69,7 @@ export class StorefrontMerchandisingService {
     );
 
     return {
-      homepageSections: homepageSections.map((section) => ({ id: section.id, type: section.type, config: section.config })),
+      homepageSections: homepageSections.map((section) => ({ id: section.id, type: section.type, config: withSectionText(section.type, section.config) })),
       hero: { slides: heroSlides, badges: heroBadges },
       banners,
       featuredSections: sections,

@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { assertSectionText, withSectionText } from '../../../common/homepage-section-content';
 import { ReorderHomepageSectionsDto } from './dto/reorder-homepage-sections.dto';
 import { UpdateHomepageSectionDto } from './dto/update-homepage-section.dto';
 
@@ -8,14 +9,17 @@ import { UpdateHomepageSectionDto } from './dto/update-homepage-section.dto';
 export class HomepageSectionsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list() {
-    return this.prisma.homepageSection.findMany({ orderBy: { sortOrder: 'asc' } });
+  // Config comes back with each section's text defaults filled in, so the editor shows what shoppers see.
+  async list() {
+    const sections = await this.prisma.homepageSection.findMany({ orderBy: { sortOrder: 'asc' } });
+    return sections.map((section) => ({ ...section, config: withSectionText(section.type, section.config) }));
   }
 
   async update(id: number, dto: UpdateHomepageSectionDto) {
     const existing = await this.prisma.homepageSection.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Homepage section not found');
-    return this.prisma.homepageSection.update({
+    if (dto.config !== undefined) assertSectionText(existing.type, dto.config);
+    const updated = await this.prisma.homepageSection.update({
       where: { id },
       data: {
         ...(dto.label !== undefined ? { label: dto.label } : {}),
@@ -23,6 +27,7 @@ export class HomepageSectionsService {
         ...(dto.config !== undefined ? { config: dto.config as Prisma.InputJsonValue } : {}),
       },
     });
+    return { ...updated, config: withSectionText(updated.type, updated.config) };
   }
 
   async reorder(dto: ReorderHomepageSectionsDto) {

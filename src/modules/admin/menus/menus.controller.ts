@@ -8,4 +8,5 @@ export class MenusController {
   @Patch(':id/items/:itemId') updateItem(@Param('id', ParseIntPipe) id: number, @Param('itemId', ParseIntPipe) itemId: number, @Body() dto: UpdateMenuItemDto) { return this.service.updateItem(id, itemId, dto); }
   @Delete(':id/items/:itemId') @HttpCode(204) async removeItem(@Param('id', ParseIntPipe) id: number, @Param('itemId', ParseIntPipe) itemId: number): Promise<void> { await this.service.removeItem(id, itemId); }
   @Post('items/:itemId/mega-menu-panel') upsertPanel(@Param('itemId', ParseIntPipe) itemId: number, @Body() dto: UpsertMegaMenuPanelDto) { return this.service.upsertPanel(itemId, dto); }
+  @Delete('items/:itemId/mega-menu-panel') @HttpCode(204) async removePanel(@Param('itemId', ParseIntPipe) itemId: number): Promise<void> { await this.service.removePanel(itemId); }
 }

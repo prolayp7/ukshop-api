@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'; import { Prisma } from '@prisma/client'; import { PrismaService } from '../../../prisma/prisma.service'; import { CreateMenuDto } from './dto/create-menu.dto'; import { CreateMenuItemDto } from './dto/create-menu-item.dto'; import { UpdateMenuItemDto } from './dto/update-menu-item.dto'; import { UpsertMegaMenuPanelDto } from './dto/upsert-mega-menu-panel.dto';
-const panelInclude = { columns: { include: { links: { include: { category: true }, orderBy: { sortOrder: 'asc' as const } } }, orderBy: { sortOrder: 'asc' as const } } };
+const panelInclude = { promoCategory: true, columns: { include: { links: { include: { category: true }, orderBy: { sortOrder: 'asc' as const } } }, orderBy: { sortOrder: 'asc' as const } } };
 const itemInclude = { category: true, megaMenuPanel: { include: panelInclude } };
 @Injectable()
 export class MenusService {
@@ -22,13 +22,23 @@ export class MenusService {
   async removeItem(menuId: number, itemId: number) { await this.item(menuId, itemId); await this.prisma.menuItem.delete({ where: { id: itemId } }); }
   async upsertPanel(itemId: number, dto: UpsertMegaMenuPanelDto) {
     const item = await this.prisma.menuItem.findUnique({ where: { id: itemId } }); if (!item) throw new NotFoundException('Menu item not found');
+    const mode = dto.mode ?? 'CUSTOM';
+    if (mode === 'AUTO' && !item.categoryId) throw new BadRequestException('An automatic panel needs the menu item to link to a category');
+    if (mode === 'CUSTOM' && !dto.columns.length) throw new BadRequestException('A custom panel needs at least one column');
     for (const column of dto.columns) for (const link of column.links) if (!link.categoryId && !link.href) throw new BadRequestException('Each mega-menu link requires categoryId or href');
+    const promoTitle = dto.promoTitle?.trim(); const promoHref = dto.promoHref?.trim();
+    if (dto.promoEnabled && (!promoTitle || (!promoHref && !dto.promoCategoryId))) throw new BadRequestException('A featured card needs a title and a link');
+    const fields = { mode, eyebrow: dto.eyebrow?.trim() || null, promoEnabled: dto.promoEnabled ?? false, promoTitle: promoTitle || null, promoText: dto.promoText?.trim() || null, promoCta: dto.promoCta?.trim() || null, promoHref: promoHref || null, promoCategoryId: dto.promoCategoryId ?? null };
+    // Columns only apply to CUSTOM panels; switching to AUTO drops them.
+    const columns = mode === 'CUSTOM' ? dto.columns : [];
     try { return await this.prisma.$transaction(async tx => {
       const existing = await tx.megaMenuPanel.findUnique({ where: { menuItemId: itemId } });
       if (existing) await tx.megaMenuColumn.deleteMany({ where: { panelId: existing.id } });
-      const nested = dto.columns.map((column, index) => ({ title: column.title, sortOrder: column.sortOrder ?? index, links: { create: column.links.map((link, linkIndex) => ({ ...link, sortOrder: link.sortOrder ?? linkIndex })) } }));
-      return tx.megaMenuPanel.upsert({ where: { menuItemId: itemId }, create: { menuItemId: itemId, columns: { create: nested } }, update: { columns: { create: nested } }, include: panelInclude });
+      const nested = columns.map((column, index) => ({ title: column.title, sortOrder: column.sortOrder ?? index, links: { create: column.links.map((link, linkIndex) => ({ ...link, sortOrder: link.sortOrder ?? linkIndex })) } }));
+      return tx.megaMenuPanel.upsert({ where: { menuItemId: itemId }, create: { menuItemId: itemId, ...fields, columns: { create: nested } }, update: { ...fields, columns: { create: nested } }, include: panelInclude });
     }); } catch (e) { return this.mapCategory(e); }
   }
+  // "No panel": the header item becomes a plain link.
+  async removePanel(itemId: number) { await this.prisma.megaMenuPanel.deleteMany({ where: { menuItemId: itemId } }); }
   private mapCategory(error: unknown): never { if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') throw new BadRequestException('Category not found'); throw error; }
 }

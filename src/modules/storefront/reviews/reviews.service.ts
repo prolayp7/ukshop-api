@@ -25,6 +25,12 @@ export class StorefrontReviewsService {
     return { items, meta: buildPaginationMeta(page, perPage, total) };
   }
 
+  async summary(): Promise<{ count: number; average: number | null }> {
+    const result = await this.prisma.review.aggregate({ where: { status: 'APPROVED' }, _avg: { rating: true }, _count: { _all: true } });
+    const count = result._count._all;
+    return { count, average: count ? Math.round((result._avg.rating ?? 0) * 10) / 10 : null };
+  }
+
   async create(userId: number, reviewerName: string, dto: CreateReviewDto) {
     const product = await this.prisma.product.findFirst({ where: { id: dto.productId, deletedAt: null } });
     if (!product) throw new NotFoundException('Product not found');

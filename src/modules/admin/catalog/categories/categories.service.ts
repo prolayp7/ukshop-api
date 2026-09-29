@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../../prisma/prisma.service';
 import { buildPaginationMeta, paginationSkipTake } from '../../../../common/pagination';
 import { CreateCategoryDto } from './dto/create-category.dto';
@@ -38,8 +39,13 @@ export class CategoriesService {
     return { createMany: { data: faqs.map((faq, index) => ({ question: faq.question, answer: faq.answer, sortOrder: index })) } };
   }
 
-  async list(page: number, perPage: number, parentId?: number, includeDeleted = false) {
-    const where = { ...(includeDeleted ? {} : { deletedAt: null }), ...(parentId !== undefined ? { parentId } : {}) };
+  async list(page: number, perPage: number, parentId?: number, includeDeleted = false, q?: string) {
+    const search = q?.trim();
+    const where: Prisma.CategoryWhereInput = {
+      ...(includeDeleted ? {} : { deletedAt: null }),
+      ...(parentId !== undefined ? { parentId } : {}),
+      ...(search ? { OR: [{ title: { contains: search, mode: 'insensitive' } }, { slug: { contains: search, mode: 'insensitive' } }] } : {}),
+    };
     const [items, total] = await Promise.all([
       this.prisma.category.findMany({
         where,

@@ -10,6 +10,12 @@ import { AuthenticatedCustomer } from '../../../common/customer/customer-request
 export class StorefrontReviewsController {
   constructor(private readonly reviewsService: StorefrontReviewsService) {}
 
+  // Store-wide rating across every approved review (homepage review score).
+  @Get('summary')
+  summary() {
+    return this.reviewsService.summary();
+  }
+
   @Get()
   list(@Query() query: ListReviewsQueryDto) {
     return this.reviewsService.list(query);
