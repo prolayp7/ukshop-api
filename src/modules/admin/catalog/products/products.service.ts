@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../../prisma/prisma.service';
+import { LowStockAlertService } from '../../../email/low-stock-alert.service';
 import { buildPaginationMeta, paginationSkipTake } from '../../../../common/pagination';
 import { CreateProductDto } from './dto/create-product.dto';
 import { CreateProductFaqDto } from './dto/create-product-faq.dto';
@@ -37,7 +38,10 @@ const productDetailInclude = {
 
 @Injectable()
 export class ProductsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly lowStockAlert: LowStockAlertService,
+  ) {}
 
   async list(query: ListProductsQueryDto) {
     const page = query.page!;
@@ -554,7 +558,9 @@ export class ProductsService {
     }
     const stockQty = dto.stockQty ?? variant.stockQty + dto.delta!;
     if (stockQty < 0) throw new BadRequestException('Stock quantity cannot be negative');
-    return this.prisma.productVariant.update({ where: { id: variantId }, data: { stockQty } });
+    const updated = await this.prisma.productVariant.update({ where: { id: variantId }, data: { stockQty } });
+    void this.lowStockAlert.checkAndNotify(variantId);
+    return updated;
   }
 
   private mapRelationError(error: unknown): never {

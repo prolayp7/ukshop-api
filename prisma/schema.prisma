@@ -523,26 +523,30 @@ model CategoryProduct {
 }
 
 model ProductVariant {
-  id                Int           @id @default(autoincrement())
-  uuid              String        @unique @default(uuid())
-  productId         Int           @map("product_id")
-  product           Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
-  title             String
-  slug              String
-  barcode           String?
-  price             Decimal       @db.Decimal(10, 2)
-  salePrice         Decimal?      @map("sale_price") @db.Decimal(10, 2)
-  stockQty          Int           @default(0) @map("stock_qty")
-  lowStockThreshold Int           @default(5) @map("low_stock_threshold")
-  weightKg          Decimal?      @map("weight_kg") @db.Decimal(6, 3)
-  lengthCm          Decimal?      @map("length_cm") @db.Decimal(6, 2)
-  widthCm           Decimal?      @map("width_cm") @db.Decimal(6, 2)
-  heightCm          Decimal?      @map("height_cm") @db.Decimal(6, 2)
-  isDefault         Boolean       @default(false) @map("is_default")
-  status            CatalogStatus @default(ACTIVE)
-  deletedAt         DateTime?     @map("deleted_at")
-  createdAt         DateTime      @default(now()) @map("created_at")
-  updatedAt         DateTime      @updatedAt @map("updated_at")
+  id                  Int           @id @default(autoincrement())
+  uuid                String        @unique @default(uuid())
+  productId           Int           @map("product_id")
+  product             Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  title               String
+  slug                String
+  barcode             String?
+  price               Decimal       @db.Decimal(10, 2)
+  salePrice           Decimal?      @map("sale_price") @db.Decimal(10, 2)
+  stockQty            Int           @default(0) @map("stock_qty")
+  lowStockThreshold   Int           @default(5) @map("low_stock_threshold")
+  // Set when a low-stock alert email has gone out for the current dip;
+  // cleared once stock rises back above the threshold, so restocking allows
+  // the next dip to alert again instead of staying silent forever.
+  lowStockAlertSentAt DateTime?     @map("low_stock_alert_sent_at")
+  weightKg            Decimal?      @map("weight_kg") @db.Decimal(6, 3)
+  lengthCm            Decimal?      @map("length_cm") @db.Decimal(6, 2)
+  widthCm             Decimal?      @map("width_cm") @db.Decimal(6, 2)
+  heightCm            Decimal?      @map("height_cm") @db.Decimal(6, 2)
+  isDefault           Boolean       @default(false) @map("is_default")
+  status              CatalogStatus @default(ACTIVE)
+  deletedAt           DateTime?     @map("deleted_at")
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
 
   attributes    ProductVariantAttribute[]
   cartItems     CartItem[]

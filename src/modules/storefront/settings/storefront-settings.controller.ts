@@ -9,4 +9,9 @@ export class StorefrontSettingsController {
   general() {
     return this.service.general();
   }
+
+  @Get('register-page')
+  registerPage() {
+    return this.service.registerPage();
+  }
 }

@@ -35,6 +35,11 @@ export function configureApp(app: INestApplication): void {
   };
   staticApp.useStaticAssets?.(mediaUploadDirectory, { prefix: '/uploads/' });
   app.enableCors({ origin: storefrontOrigins(), credentials: true });
+  // When the API is private behind the storefront, every request arrives from the storefront server.
+  // TRUST_PROXY_HOPS (usually 1) makes req.ip - and so the per-IP rate limit - use the client address
+  // it forwards in X-Forwarded-For. Leave unset if the API is reachable directly: the header is spoofable.
+  const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? 0);
+  if (trustProxyHops > 0) app.getHttpAdapter().getInstance().set('trust proxy', trustProxyHops);
   app.setGlobalPrefix('api/v1');
   app.useGlobalPipes(
     new ValidationPipe({

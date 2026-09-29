@@ -13,6 +13,7 @@ import { CheckoutDto } from './dto/checkout.dto';
 import { mediaUploadDirectory } from '../../../bootstrap';
 import { buildInvoicePdf } from './invoice-pdf';
 import { EmailService } from '../../email/email.service';
+import { LowStockAlertService } from '../../email/low-stock-alert.service';
 import { orderConfirmationEmail, orderCancelledEmail } from '../../email/email-templates';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -39,6 +40,7 @@ export class OrdersService {
     private readonly shippingService: StorefrontShippingService,
     private readonly couponsService: StorefrontCouponsService,
     private readonly emailService: EmailService,
+    private readonly lowStockAlert: LowStockAlertService,
   ) {}
 
   private async generateOrderNumber(): Promise<string> {
@@ -238,6 +240,7 @@ export class OrdersService {
       address: { fullName: shipping.fullName, line1: shipping.line1, line2: shipping.line2, city: shipping.city, postcode: shipping.postcode },
     });
     void this.emailService.send(email, confirmation.subject, confirmation.html);
+    for (const item of activeItems) void this.lowStockAlert.checkAndNotify(item.productVariantId);
 
     return this.findByUuid(created.uuid);
   }
@@ -315,6 +318,7 @@ export class OrdersService {
 
     const email = orderCancelledEmail({ orderNumber: updated.orderNumber });
     void this.emailService.send(updated.email, email.subject, email.html);
+    for (const item of order.items) void this.lowStockAlert.checkAndNotify(item.productVariantId);
 
     return updated;
   }
