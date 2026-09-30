@@ -1553,6 +1553,8 @@ enum HomepageSectionType {
   LAPTOP_SHOWCASE
   BUYING_GUIDES
   SEO_INTRO
+  BUSINESS_BANNER
+  CATEGORY_SPLIT
 }
 
 // The ordering/visibility layer for the storefront homepage: which of the

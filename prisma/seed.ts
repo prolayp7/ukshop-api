@@ -3,6 +3,7 @@ import * as bcrypt from 'bcrypt';
 import { seedProducts } from './seed-products';
 import { seedHeaderMenu } from './seed-header-menu';
 import { seedLegalPages } from './seed-legal-pages';
+import { seedHomepageContent } from './seed-homepage-content';
 
 const prisma = new PrismaClient();
 
@@ -464,6 +465,8 @@ async function main() {
   await findOrCreateHomepageSection('LAPTOP_SHOWCASE', { label: 'Laptops for work, study & play', sortOrder: 14 });
   await findOrCreateHomepageSection('BUYING_GUIDES', { label: 'Buying guides', sortOrder: 15 });
   await findOrCreateHomepageSection('SEO_INTRO', { label: 'SEO intro & special offer', sortOrder: 16 });
+  // Hidden: the storefront has no blog pages or blog section yet, so showing it would render nothing.
+  await findOrCreateHomepageSection('BLOG_HIGHLIGHTS', { label: 'Blog highlights', sortOrder: 17, isVisible: false });
 
   // Static CMS pages - demo content for the storefront's content pages.
   const findOrCreatePage = (slug: string, create: Parameters<typeof prisma.page.create>[0]['data']) =>
@@ -502,6 +505,9 @@ async function main() {
       ],
     });
   }
+
+  // Items of the sections still hardcoded in the storefront (cards, chips, tabs, selections, guides).
+  for (const note of await seedHomepageContent(prisma)) console.log(note);
 
   console.log('Seed complete.');
 }

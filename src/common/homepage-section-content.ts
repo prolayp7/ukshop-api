@@ -27,6 +27,7 @@ export const SECTION_TEXT: Partial<Record<HomepageSectionType, SectionText>> = {
   GAMING_SHOWCASE: { heading: heading('Level up your gaming'), body: line('Three pre-built tiers, each stress-tested for 48 hours before it ships. Customise any part before you check out.') },
   LAPTOP_SHOWCASE: { heading: heading('Laptops for work, study & play'), body: line('') },
   BUYING_GUIDES: { heading: heading('Not sure what you need? Start here.'), body: line('Computer buying guides') },
+  BUSINESS_BANNER: { heading: heading('Reliable computers for modern UK businesses'), body: line('Desktop PCs, workstations, laptops and monitors — with volume pricing on multi-unit orders.') },
   // Paragraphs separated by a blank line.
   SEO_INTRO: {
     heading: heading('UK Computer Shop for PC Hardware, Gaming & Business Technology'),
