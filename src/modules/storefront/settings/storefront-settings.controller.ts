@@ -14,4 +14,14 @@ export class StorefrontSettingsController {
   registerPage() {
     return this.service.registerPage();
   }
+
+  @Get('footer')
+  footer() {
+    return this.service.footer();
+  }
+
+  @Get('top-bar')
+  topBar() {
+    return this.service.topBar();
+  }
 }
