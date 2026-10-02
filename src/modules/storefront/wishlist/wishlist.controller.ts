@@ -1,6 +1,7 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, Patch, Post, UseGuards } from '@nestjs/common';
 import { WishlistService } from './wishlist.service';
 import { AddWishlistItemDto } from './dto/add-wishlist-item.dto';
+import { UpdateWishlistAlertsDto } from './dto/update-wishlist-alerts.dto';
 import { CustomerAuthGuard } from '../../../common/customer/customer-auth.guard';
 import { CurrentCustomer } from '../../../common/customer/current-customer.decorator';
 import { AuthenticatedCustomer } from '../../../common/customer/customer-request';
@@ -24,5 +25,10 @@ export class WishlistController {
   @Delete('items/:variantId')
   removeItem(@CurrentCustomer() customer: AuthenticatedCustomer, @Param('variantId', ParseIntPipe) variantId: number) {
     return this.wishlistService.removeItem(customer.id, variantId);
+  }
+
+  @Patch('items/:variantId/alerts')
+  updateAlerts(@CurrentCustomer() customer: AuthenticatedCustomer, @Param('variantId', ParseIntPipe) variantId: number, @Body() dto: UpdateWishlistAlertsDto) {
+    return this.wishlistService.updateAlerts(customer.id, variantId, dto);
   }
 }

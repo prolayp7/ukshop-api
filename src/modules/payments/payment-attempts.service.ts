@@ -155,6 +155,7 @@ export class PaymentAttemptsService {
     );
 
     let paidOrderId: number | null = null;
+    let failedOrderId: number | null = null;
     await this.prisma.$transaction(async (tx) => {
       const attempt = await tx.paymentAttempt.findUnique({ where: { id: attemptId } });
       if (!attempt) return;
@@ -191,10 +192,12 @@ export class PaymentAttemptsService {
         await tx.orderStatusHistory.create({
           data: { orderId: order.id, fromStatus: order.status, toStatus: 'FAILED', note: `Payment failed via ${label}` },
         });
+        failedOrderId = order.id;
       }
     });
     await this.audit.log({ action: outcome.captured ? 'payment.captured' : 'payment.failed', entity: 'PaymentAttempt', entityId: attemptId, meta: { provider: current.provider } });
     if (paidOrderId !== null) await this.orders.sendPaidOrderConfirmation(paidOrderId);
+    if (failedOrderId !== null) await this.orders.sendPaymentFailedNotification(failedOrderId, label);
   }
 
   /** Looks up a PaymentAttempt by the provider's own order/intent id - used

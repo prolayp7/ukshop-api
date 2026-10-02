@@ -22,7 +22,7 @@ export const target = (...tags: string[]): RevalidationTarget => ({ tags });
 /** A product's page, its category (and parent categories') listings, its brand page and cross-catalogue lists. */
 export async function productTarget(prisma: Db, productIds: (number | null | undefined)[]): Promise<RevalidationTarget> {
   const ids = [...new Set(productIds.filter((id): id is number => Number.isInteger(id) && (id as number) > 0))];
-  const tags: string[] = [CacheTags.products, CacheTags.homepage];
+  const tags: string[] = [CacheTags.products, CacheTags.brands, CacheTags.homepage];
   if (!ids.length) return { tags };
   const products = await prisma.product.findMany({ where: { id: { in: ids } }, select: { id: true, slug: true, categoryId: true, brand: { select: { slug: true } } } });
   for (const product of products) {

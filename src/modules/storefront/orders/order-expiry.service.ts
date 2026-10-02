@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { withLease } from '../../../common/lease';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { WishlistAlertService } from '../../email/wishlist-alert.service';
 
 const SWEEP_MS = 5 * 60 * 1000;
 const holdMinutes = () => Number(process.env.UNPAID_ORDER_HOLD_MINUTES ?? 60);
@@ -12,7 +13,7 @@ export class OrderExpiryService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(OrderExpiryService.name);
   private timer?: NodeJS.Timeout;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly wishlistAlerts: WishlistAlertService) {}
 
   onModuleInit() {
     if (process.env.NODE_ENV === 'test') return;
@@ -46,6 +47,7 @@ export class OrderExpiryService implements OnModuleInit, OnModuleDestroy {
         }
         expired += 1;
       });
+      for (const item of order.items) void this.wishlistAlerts.checkVariant(item.productVariantId);
     }
     if (expired) this.logger.log(`Expired ${expired} unpaid order(s)`);
     return expired;

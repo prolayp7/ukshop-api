@@ -86,4 +86,27 @@ describe('PaymentAttemptsService', () => {
     expect(tx.invoice.create).toHaveBeenCalledWith({ data: { invoiceNumber: 'INV-000042', orderId: 12, currency: 'GBP', total } });
     expect(orders.sendPaidOrderConfirmation).toHaveBeenCalledWith(12);
   });
+
+  it('sends a customer email after a provider-confirmed payment failure', async () => {
+    const attempt = { id: 92, uuid: 'attempt-failed', orderId: 13, provider: 'STRIPE', amount: new Prisma.Decimal('29.99'), currency: 'GBP' };
+    const order = { id: 13, status: 'AWAITING_PAYMENT', paymentStatus: 'PENDING' };
+    const tx = {
+      paymentAttempt: { findUnique: jest.fn().mockResolvedValue(attempt) },
+      order: { findUnique: jest.fn().mockResolvedValue(order), update: jest.fn().mockResolvedValue(undefined) },
+      orderStatusHistory: { create: jest.fn().mockResolvedValue(undefined) },
+    };
+    const prisma = {
+      paymentAttempt: { findUnique: jest.fn().mockResolvedValue({ status: 'PROCESSING', provider: 'STRIPE', amount: attempt.amount, currency: 'GBP' }) },
+      $transaction: jest.fn((callback: (client: typeof tx) => Promise<void>) => callback(tx)),
+    };
+    const paymentState = { transition: jest.fn().mockResolvedValue(undefined) };
+    const audit = { log: jest.fn().mockResolvedValue(undefined) };
+    const orders = { sendPaymentFailedNotification: jest.fn().mockResolvedValue(undefined) };
+    const service = new PaymentAttemptsService(prisma as never, paymentState as never, undefined as never, undefined as never, audit as never, orders as never);
+
+    await service.finalizeCapture(92, { captured: false });
+
+    expect(orders.sendPaymentFailedNotification).toHaveBeenCalledWith(13, 'Stripe');
+    expect(tx.order.update).toHaveBeenCalledWith({ where: { id: 13 }, data: { paymentStatus: 'FAILED', status: 'FAILED' } });
+  });
 });

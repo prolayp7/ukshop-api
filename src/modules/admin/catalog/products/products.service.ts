@@ -7,6 +7,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../../prisma/prisma.service';
 import { LowStockAlertService } from '../../../email/low-stock-alert.service';
+import { WishlistAlertService } from '../../../email/wishlist-alert.service';
 import { buildPaginationMeta, paginationSkipTake } from '../../../../common/pagination';
 import { CreateProductDto } from './dto/create-product.dto';
 import { CreateProductFaqDto } from './dto/create-product-faq.dto';
@@ -41,6 +42,7 @@ export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly lowStockAlert: LowStockAlertService,
+    private readonly wishlistAlerts: WishlistAlertService,
   ) {}
 
   async list(query: ListProductsQueryDto) {
@@ -204,7 +206,7 @@ export class ProductsService {
   async update(id: number, dto: UpdateProductDto) {
     await this.detail(id);
     if (dto.slug) await this.assertSlugAvailable(dto.slug, id);
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       await tx.product.update({
         where: { id },
         data: this.productData(dto) as Prisma.ProductUncheckedUpdateInput,
@@ -267,6 +269,8 @@ export class ProductsService {
       }
       return tx.product.findUniqueOrThrow({ where: { id }, include: productDetailInclude });
     }).catch((error: unknown) => this.mapRelationError(error));
+    if (dto.initialVariant !== undefined || dto.dealEndsAt !== undefined) void this.wishlistAlerts.checkProduct(id);
+    return updated;
   }
 
   async duplicate(id: number) {
@@ -475,7 +479,7 @@ export class ProductsService {
   async updateVariant(productId: number, variantId: number, dto: UpdateProductVariantDto) {
     await this.variant(productId, variantId);
     const { attributeValueIds, ...data } = dto;
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       if (dto.slug) {
         const duplicate = await tx.productVariant.findFirst({
           where: { productId, slug: dto.slug, deletedAt: null, id: { not: variantId } },
@@ -502,6 +506,8 @@ export class ProductsService {
         include: { attributes: { include: { attribute: true, attributeValue: true } } },
       });
     });
+    if (dto.price !== undefined || dto.salePrice !== undefined) void this.wishlistAlerts.checkVariant(variantId);
+    return updated;
   }
 
   async removeVariant(productId: number, variantId: number) {
@@ -561,6 +567,7 @@ export class ProductsService {
     if (stockQty < 0) throw new BadRequestException('Stock quantity cannot be negative');
     const updated = await this.prisma.productVariant.update({ where: { id: variantId }, data: { stockQty } });
     void this.lowStockAlert.checkAndNotify(variantId);
+    void this.wishlistAlerts.checkVariant(variantId);
     return updated;
   }
 

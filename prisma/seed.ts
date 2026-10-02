@@ -118,15 +118,24 @@ async function main() {
     });
   }
 
-  // Category tree (subset from requirement.md)
+  // Required storefront category tree plus the existing Software department.
   // Note: Category.slug is no longer a Prisma `@unique` field (it's enforced via a
   // partial unique index scoped to live rows instead, so soft-deleted slugs can be
   // reused - see the schema_review_fixes migration), so it can't be used in an
   // `upsert`/`findUnique` where-clause. Fall back to findFirst + conditional create.
-  const findOrCreateCategory = (where: { slug: string }, create: Parameters<typeof prisma.category.create>[0]['data']) =>
-    prisma.category.findFirst({ where: { ...where, deletedAt: null } }).then((existing) =>
-      existing ?? prisma.category.create({ data: create }),
-    );
+  const legacyCategoryTitles: Record<string, { from: string; to: string }> = {
+    'memory-ram': { from: 'Memory / RAM', to: 'RAM / Memory' },
+    'wireless-adapters': { from: 'Wireless Adapters', to: 'Wi-Fi Adapters' },
+  };
+  const findOrCreateCategory = async (where: { slug: string }, create: Parameters<typeof prisma.category.create>[0]['data']) => {
+    const existing = await prisma.category.findFirst({ where: { ...where, deletedAt: null } });
+    if (!existing) return prisma.category.create({ data: create });
+    const title = legacyCategoryTitles[where.slug];
+    if (title && existing.title === title.from) {
+      return prisma.category.update({ where: { id: existing.id }, data: { title: title.to } });
+    }
+    return existing;
+  };
 
   const pcComponents = await findOrCreateCategory(
     { slug: 'pc-components' },
@@ -152,6 +161,15 @@ async function main() {
     { slug: 'storage' },
     { title: 'Storage', slug: 'storage', parentId: pcComponents.id, sortOrder: 5 },
   );
+  for (const [title, slug, sortOrder] of [
+    ['SSD', 'ssd', 9],
+    ['HDD', 'hdd', 10],
+    ['CPU Coolers', 'cpu-coolers', 11],
+    ['Case Fans', 'case-fans', 12],
+    ['Thermal Paste', 'thermal-paste', 13],
+  ] as const) {
+    await findOrCreateCategory({ slug }, { title, slug, parentId: pcComponents.id, sortOrder });
+  }
   await findOrCreateCategory(
     { slug: 'pc-cases' },
     { title: 'PC Cases', slug: 'pc-cases', parentId: pcComponents.id, sortOrder: 6 },
@@ -185,6 +203,13 @@ async function main() {
     { slug: 'mini-pcs' },
     { title: 'Mini PCs', slug: 'mini-pcs', parentId: computers.id, sortOrder: 4 },
   );
+  for (const [title, slug, sortOrder] of [
+    ['Business PCs', 'business-pcs', 5],
+    ['All-in-One PCs', 'all-in-one-pcs', 6],
+    ['Refurbished PCs', 'refurbished-pcs', 7],
+  ] as const) {
+    await findOrCreateCategory({ slug }, { title, slug, parentId: computers.id, sortOrder });
+  }
 
   const laptops = await findOrCreateCategory(
     { slug: 'laptops' },
@@ -201,6 +226,14 @@ async function main() {
   await findOrCreateCategory(
     { slug: 'ultrabooks' },
     { title: 'Ultrabooks', slug: 'ultrabooks', parentId: laptops.id, sortOrder: 3 },
+  );
+  await findOrCreateCategory(
+    { slug: 'student-laptops' },
+    { title: 'Student Laptops', slug: 'student-laptops', parentId: laptops.id, sortOrder: 4 },
+  );
+  await findOrCreateCategory(
+    { slug: 'refurbished-laptops' },
+    { title: 'Refurbished Laptops', slug: 'refurbished-laptops', parentId: laptops.id, sortOrder: 5 },
   );
 
   const peripherals = await findOrCreateCategory(
@@ -227,6 +260,14 @@ async function main() {
     { slug: 'webcams' },
     { title: 'Webcams', slug: 'webcams', parentId: peripherals.id, sortOrder: 5 },
   );
+  await findOrCreateCategory(
+    { slug: 'speakers' },
+    { title: 'Speakers', slug: 'speakers', parentId: peripherals.id, sortOrder: 6 },
+  );
+  await findOrCreateCategory(
+    { slug: 'gaming-accessories' },
+    { title: 'Gaming Accessories', slug: 'gaming-accessories', parentId: peripherals.id, sortOrder: 7 },
+  );
 
   const networking = await findOrCreateCategory(
     { slug: 'networking' },
@@ -235,9 +276,26 @@ async function main() {
   for (const [title, slug, sortOrder] of [
     ['Routers', 'routers', 1],
     ['Network Switches', 'network-switches', 2],
-    ['Wireless Adapters', 'wireless-adapters', 3],
+    ['Wi-Fi Adapters', 'wireless-adapters', 3],
+    ['Ethernet Cables', 'ethernet-cables', 4],
+    ['Access Points', 'access-points', 5],
   ] as const) {
     await findOrCreateCategory({ slug }, { title, slug, parentId: networking.id, sortOrder });
+  }
+
+  const accessories = await findOrCreateCategory(
+    { slug: 'accessories' },
+    { title: 'Accessories', slug: 'accessories', sortOrder: 6 },
+  );
+  for (const [title, slug, sortOrder] of [
+    ['USB Hubs', 'usb-hubs', 1],
+    ['Cables', 'cables', 2],
+    ['Adapters', 'adapters', 3],
+    ['Laptop Chargers', 'laptop-chargers', 4],
+    ['Docking Stations', 'docking-stations', 5],
+    ['Storage Accessories', 'storage-accessories', 6],
+  ] as const) {
+    await findOrCreateCategory({ slug }, { title, slug, parentId: accessories.id, sortOrder });
   }
 
   const software = await findOrCreateCategory(

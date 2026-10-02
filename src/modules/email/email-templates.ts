@@ -29,9 +29,9 @@ function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function shell(title: string, preheader: string, bodyRows: string, footerVariant: 'transactional' | 'marketing' = 'transactional'): string {
+function shell(title: string, preheader: string, bodyRows: string, footerVariant: 'transactional' | 'marketing' = 'transactional', unsubscribeUrl?: string): string {
   const unsub = footerVariant === 'marketing'
-    ? `<a href="${STOREFRONT_URL}/account?tab=details" style="color:${C.footInk};text-decoration:underline;">Unsubscribe</a>`
+    ? `<a href="${esc(unsubscribeUrl ?? STOREFRONT_URL)}" style="color:${C.footInk};text-decoration:underline;">Unsubscribe</a>`
     : `<a href="${STOREFRONT_URL}/account?tab=details" style="color:${C.footInk};text-decoration:underline;">Manage email preferences</a>`;
 
   return `<!doctype html>
@@ -265,14 +265,78 @@ export function returnRequestedEmail(params: { orderNumber: string; itemTitle: s
   return { subject: `Return requested - ${params.orderNumber}`, html: shell(`Return request received - ${params.orderNumber}`, `We're reviewing your return request for order ${params.orderNumber}.`, body) };
 }
 
-export function orderRefundedEmail(params: { orderNumber: string; refundAmount: string }) {
+export function orderRefundedEmail(params: { orderNumber: string; refundAmount: string; refundType: 'PARTIAL' | 'FULL' }) {
   let body = contentOpen();
-  body += badge('Refund processed', C.greenSoft, C.green);
-  body += h1('Your refund is on its way');
+  const label = params.refundType === 'FULL' ? 'Full refund processed' : 'Partial refund processed';
+  body += badge(label, C.greenSoft, C.green);
+  body += h1(params.refundType === 'FULL' ? 'Your full refund is on its way' : 'Your partial refund is on its way');
   body += p(`We&rsquo;ve processed a refund for order <b>${esc(params.orderNumber)}</b>. It can take 3&ndash;5 business days to reach your original payment method.`);
   body += factRow([['Refund amount', money(Number(params.refundAmount))], ['Order number', esc(params.orderNumber)]]);
   body += contentClose();
-  return { subject: `Refund processed - ${params.orderNumber}`, html: shell(`Refund processed - ${params.orderNumber}`, `A refund has been processed for order ${params.orderNumber}.`, body) };
+  return { subject: `${label} - ${params.orderNumber}`, html: shell(`${label} - ${params.orderNumber}`, `A ${params.refundType.toLowerCase()} refund has been processed for order ${params.orderNumber}.`, body) };
+}
+
+export function returnApprovedEmail(params: { orderNumber: string; returnNumber: string }) {
+  let body = contentOpen();
+  body += badge('Return approved', C.greenSoft, C.green);
+  body += h1('Your return has been approved');
+  body += p(`Return <b>${esc(params.returnNumber)}</b> for order <b>${esc(params.orderNumber)}</b> has been approved. We&rsquo;ll email you when collection is arranged.`);
+  body += button('View return status', `${STOREFRONT_URL}/account?tab=returns`);
+  body += contentClose();
+  return { subject: `Return approved - ${params.returnNumber}`, html: shell(`Return approved - ${params.returnNumber}`, `Your return for order ${params.orderNumber} has been approved.`, body) };
+}
+
+export function returnRejectedEmail(params: { orderNumber: string; returnNumber: string; reason: string }) {
+  let body = contentOpen();
+  body += badge('Return not approved', C.amberSoft, C.amberDark);
+  body += h1('We couldn&rsquo;t approve your return');
+  body += p(`Return <b>${esc(params.returnNumber)}</b> for order <b>${esc(params.orderNumber)}</b> was not approved.`);
+  body += p(`<b>Reason</b><br>${esc(params.reason)}`);
+  body += button('View return status', `${STOREFRONT_URL}/account?tab=returns`);
+  body += contentClose();
+  return { subject: `Return update - ${params.returnNumber}`, html: shell(`Return update - ${params.returnNumber}`, `There is an update to your return for order ${params.orderNumber}.`, body) };
+}
+
+export function returnReceivedEmail(params: { orderNumber: string; returnNumber: string }) {
+  let body = contentOpen();
+  body += badge('Return received', C.blueSoft, C.blueDark);
+  body += h1('We&rsquo;ve received your return');
+  body += p(`The items for return <b>${esc(params.returnNumber)}</b> from order <b>${esc(params.orderNumber)}</b> have arrived and are being inspected. We&rsquo;ll email you when the review is complete.`);
+  body += button('View return status', `${STOREFRONT_URL}/account?tab=returns`);
+  body += contentClose();
+  return { subject: `Return received - ${params.returnNumber}`, html: shell(`Return received - ${params.returnNumber}`, `We received the items for return ${params.returnNumber}.`, body) };
+}
+
+export function paymentFailedEmail(params: { orderNumber: string; provider: string }) {
+  let body = contentOpen();
+  body += badge('Payment not completed', C.amberSoft, C.amberDark);
+  body += h1('Your payment didn&rsquo;t go through');
+  body += p(`We couldn&rsquo;t confirm payment for order <b>${esc(params.orderNumber)}</b> through ${esc(params.provider)}. No successful payment was recorded. You can retry from the checkout page if it is still open, or contact our support team for help.`);
+  body += button('Return to the shop', STOREFRONT_URL);
+  body += contentClose();
+  return { subject: `Payment not completed - ${params.orderNumber}`, html: shell(`Payment not completed - ${params.orderNumber}`, `Payment for order ${params.orderNumber} was not completed.`, body) };
+}
+
+export function newPaidOrderEmail(params: { orderNumber: string; customerEmail: string; itemCount: number; total: string }) {
+  let body = contentOpen();
+  body += badge('Paid order', C.greenSoft, C.green);
+  body += h1(`New paid order ${esc(params.orderNumber)}`);
+  body += p(`A customer order has been paid and is ready for fulfilment.`);
+  body += factRow([['Customer', esc(params.customerEmail)], ['Items', String(params.itemCount)], ['Order total', esc(params.total)]]);
+  body += button('Open admin orders', `${process.env.ADMIN_URL ?? 'http://localhost:3001'}/orders`);
+  body += contentClose();
+  return { subject: `New paid order - ${params.orderNumber}`, html: shell(`New paid order - ${params.orderNumber}`, `Order ${params.orderNumber} is ready for fulfilment.`, body) };
+}
+
+export function paymentDisputeOpenedEmail(params: { orderNumber: string; disputeId: string; amount: string; currency: string; reason: string; respondBy: string | null }) {
+  let body = contentOpen();
+  body += badge('Payment dispute', C.amberSoft, C.amberDark);
+  body += h1('A payment dispute needs attention');
+  body += p(`A dispute was opened for order <b>${esc(params.orderNumber)}</b>. Review the case and evidence deadline in the payments area.`);
+  body += factRow([['Dispute ID', esc(params.disputeId)], ['Amount', `${esc(params.currency.toUpperCase())} ${esc(params.amount)}`], ['Reason', esc(params.reason || 'Not provided')], ['Respond by', esc(params.respondBy || 'Check provider dashboard')]]);
+  body += button('Review payment disputes', `${process.env.ADMIN_URL ?? 'http://localhost:3001'}/payments`);
+  body += contentClose();
+  return { subject: `Action required: payment dispute - ${params.orderNumber}`, html: shell(`Payment dispute - ${params.orderNumber}`, `A dispute for order ${params.orderNumber} needs a response.`, body) };
 }
 
 /* ------------------------------------------------------------------------ */
@@ -342,14 +406,52 @@ export function passwordResetEmail(params: { code: string }) {
 /* Newsletter & notifications                                              */
 /* ------------------------------------------------------------------------ */
 
-export function newsletterSubscribedEmail() {
+export function newsletterSubscribedEmail(unsubscribeUrl: string) {
   let body = contentOpen();
   body += badgeRaw('You&rsquo;re on the list', C.greenSoft, C.green);
   body += h1('Thanks for subscribing');
   body += p('You&rsquo;ll hear from us about once a week &mdash; mostly restock alerts and genuine price drops on PC hardware, laptops and peripherals. No spam, unsubscribe any time.');
   body += button('Start shopping', STOREFRONT_URL);
   body += contentClose();
-  return { subject: "You're on the list", html: shell("You're on the list", 'Thanks for subscribing to deals & restock alerts.', body, 'marketing') };
+  return { subject: "You're on the list", html: shell("You're on the list", 'Thanks for subscribing to deals & restock alerts.', body, 'marketing', unsubscribeUrl) };
+}
+
+export function newsletterCampaignEmail(params: { subject: string; preheader: string; heading: string; message: string; unsubscribeUrl: string }) {
+  let body = contentOpen();
+  body += h1(esc(params.heading));
+  for (const paragraph of params.message.split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean)) {
+    body += p(esc(paragraph).replace(/\n/g, '<br>'));
+  }
+  body += button('Shop the latest', STOREFRONT_URL);
+  body += contentClose();
+  return {
+    subject: params.subject,
+    html: shell(params.subject, params.preheader, body, 'marketing', params.unsubscribeUrl),
+  };
+}
+
+export function wishlistBackInStockEmail(params: { productTitle: string; variantTitle: string; slug: string }) {
+  let body = contentOpen();
+  body += badge('Back in stock', C.greenSoft, C.green);
+  body += h1('A saved item is available again');
+  body += itemRow(params.productTitle, params.variantTitle, '', true);
+  body += p('You asked us to let you know when this item was available. Stock can change quickly.');
+  body += button('View product', `${STOREFRONT_URL}/product/${encodeURIComponent(params.slug)}`);
+  body += p(`<a href="${STOREFRONT_URL}/account?tab=wishlist">Manage saved product alerts</a>`, { size: 12.5, margin: '16px 0 0' });
+  body += contentClose();
+  return { subject: `Back in stock - ${params.productTitle}`, html: shell(`Back in stock - ${params.productTitle}`, `${params.productTitle} is available again.`, body) };
+}
+
+export function wishlistPriceDropEmail(params: { productTitle: string; variantTitle: string; slug: string; previousPrice: string; currentPrice: string }) {
+  let body = contentOpen();
+  body += badge('Price drop', C.red, '#ffffff');
+  body += h1('The price dropped on a saved item');
+  body += itemRow(params.productTitle, params.variantTitle, '', true);
+  body += factRow([['Was', esc(params.previousPrice)], ['Now', esc(params.currentPrice)]]);
+  body += button('View product', `${STOREFRONT_URL}/product/${encodeURIComponent(params.slug)}`);
+  body += p(`<a href="${STOREFRONT_URL}/account?tab=wishlist">Manage saved product alerts</a>`, { size: 12.5, margin: '16px 0 0' });
+  body += contentClose();
+  return { subject: `Price drop - ${params.productTitle}`, html: shell(`Price drop - ${params.productTitle}`, `${params.productTitle} is now ${params.currentPrice}.`, body) };
 }
 
 export function notificationEmail(params: { title: string; message: string }) {

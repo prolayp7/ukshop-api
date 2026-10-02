@@ -1,11 +1,14 @@
 import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { DisputeStatus, Prisma } from '@prisma/client';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SettingsService } from '../admin/settings/settings.service';
 import { PaymentAttemptsService } from './payment-attempts.service';
 import { PaypalGatewayService } from './paypal-gateway.service';
 import { RefundSettlementService, refundOutcome } from '../returns/refund-settlement.service';
+import { EmailService } from '../email/email.service';
+import { paymentDisputeOpenedEmail } from '../email/email-templates';
+import { resolveAdminEmail } from '../email/admin-email.util';
 
 const SIGNATURE_TOLERANCE_SECONDS = 300;
 
@@ -16,9 +19,12 @@ interface StripeEvent {
     id?: string;
     amount_total?: number | null;
     amount_received?: number | null;
+    amount?: number | null;
     currency?: string | null;
     status?: string | null;
     failure_reason?: string | null;
+    reason?: string | null;
+    evidence_details?: { due_by?: number | null } | null;
     payment_intent?: string | { id?: string } | null;
   } };
 }
@@ -37,6 +43,7 @@ export class PaymentWebhooksService {
     private readonly paypalGateway: PaypalGatewayService,
     private readonly attempts: PaymentAttemptsService,
     private readonly refunds: RefundSettlementService,
+    private readonly email: EmailService,
   ) {}
 
   private verifyStripeSignature(rawBody: Buffer, header: string, secret: string): boolean {
@@ -117,6 +124,11 @@ export class PaymentWebhooksService {
     const providerObjectId = object?.id;
     if (!object || !providerObjectId) return;
 
+    if (event.type === 'charge.dispute.created' || event.type === 'charge.dispute.updated' || event.type === 'charge.dispute.closed') {
+      await this.applyStripeDispute(event.type, object, event);
+      return;
+    }
+
     // Refund confirmations: the only way a "pending" refund becomes successful (or failed).
     if (event.type === 'refund.updated' || event.type === 'charge.refund.updated' || event.type === 'refund.failed') {
       const outcome = event.type === 'refund.failed' ? 'FAILED' : refundOutcome(object.status);
@@ -140,6 +152,63 @@ export class PaymentWebhooksService {
       if (typeof object.currency === 'string') outcome.paidCurrency = object.currency.toUpperCase();
     }
     await this.attempts.finalizeCapture(attempt.id, outcome);
+  }
+
+  private async applyStripeDispute(eventType: string, object: NonNullable<StripeEvent['data']>['object'] & {}, event: StripeEvent): Promise<void> {
+    if (!object?.id) return;
+    const paymentIntent = typeof object.payment_intent === 'string' ? object.payment_intent : object.payment_intent?.id;
+    if (!paymentIntent) return;
+    const transaction = await this.prisma.paymentTransaction.findFirst({
+      where: { provider: 'STRIPE', providerTransactionId: paymentIntent },
+      include: { order: { select: { id: true, orderNumber: true } } },
+    });
+    if (!transaction) return;
+
+    const statusText = object.status?.toLowerCase();
+    const status: DisputeStatus = statusText === 'won'
+      ? 'WON'
+      : statusText === 'lost'
+        ? 'LOST'
+        : statusText === 'under_review'
+          ? 'UNDER_REVIEW'
+          : statusText === 'warning_needs_response'
+            ? 'WARNING'
+            : 'NEEDS_RESPONSE';
+    const respondBy = object.evidence_details?.due_by;
+    await this.prisma.paymentDispute.upsert({
+      where: { providerDisputeId: object.id },
+      create: {
+        transactionId: transaction.id,
+        orderId: transaction.order.id,
+        providerDisputeId: object.id,
+        amount: new Prisma.Decimal(((object.amount ?? 0) / 100).toFixed(2)),
+        status,
+        reasonCode: object.reason ?? null,
+        reasonDescription: object.reason ?? null,
+        respondBy: typeof respondBy === 'number' ? new Date(respondBy * 1000) : null,
+        rawPayload: event as unknown as Prisma.InputJsonValue,
+      },
+      update: {
+        status,
+        reasonCode: object.reason ?? null,
+        reasonDescription: object.reason ?? null,
+        respondBy: typeof respondBy === 'number' ? new Date(respondBy * 1000) : null,
+        rawPayload: event as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    if (eventType !== 'charge.dispute.created') return;
+    const adminEmail = await resolveAdminEmail(this.prisma);
+    if (!adminEmail) return;
+    const message = paymentDisputeOpenedEmail({
+      orderNumber: transaction.order.orderNumber,
+      disputeId: object.id,
+      amount: ((object.amount ?? 0) / 100).toFixed(2),
+      currency: object.currency ?? transaction.currency,
+      reason: object.reason ?? '',
+      respondBy: typeof respondBy === 'number' ? new Date(respondBy * 1000).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }) + ' UTC' : null,
+    });
+    void this.email.send(adminEmail, message.subject, message.html);
   }
 
   // PayPal signs webhooks with a per-request certificate + transmission

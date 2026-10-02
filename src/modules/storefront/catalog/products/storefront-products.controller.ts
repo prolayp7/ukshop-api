@@ -1,7 +1,8 @@
-import { Controller, Get, Param, ParseIntPipe, Query, DefaultValuePipe } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, ParseIntPipe, Post, Query, DefaultValuePipe } from '@nestjs/common';
 import { StorefrontProductsService } from './storefront-products.service';
 import { ListStorefrontProductsQueryDto } from './dto/list-storefront-products-query.dto';
 import { CompatibleProductsQueryDto } from './dto/compatible-products-query.dto';
+import { AlsoViewedProductsQueryDto, RecordProductViewDto } from './dto/product-browsing-history.dto';
 
 @Controller('products')
 export class StorefrontProductsController {
@@ -18,6 +19,17 @@ export class StorefrontProductsController {
   @Get('recommended')
   recommended(@Query('limit', new DefaultValuePipe(4), ParseIntPipe) limit: number) {
     return this.productsService.bestSellers(Math.min(limit, 12));
+  }
+
+  @Get('also-viewed')
+  async alsoViewed(@Query() query: AlsoViewedProductsQueryDto) {
+    return { items: await this.productsService.alsoViewed(query.ids ?? [], query.limit ?? 4) };
+  }
+
+  @Post('browsing-history')
+  @HttpCode(204)
+  async recordView(@Body() dto: RecordProductViewDto): Promise<void> {
+    await this.productsService.recordView(dto.productId, dto.sessionId);
   }
 
   @Get(':slug/compatible')

@@ -16,21 +16,28 @@ export class StorefrontBrandsService {
     // groupBy-based approach if the catalogue grows much larger)
     const variants = await this.prisma.productVariant.findMany({
       where: { deletedAt: null, status: 'ACTIVE', product: { status: 'ACTIVE', deletedAt: null, brandId: { not: null } } },
-      select: { price: true, productId: true, product: { select: { brandId: true } } },
+      select: { price: true, salePrice: true, productId: true, product: { select: { brandId: true, dealEndsAt: true } } },
     });
     const productIdsByBrand = new Map<number, Set<number>>();
+    const dealProductIdsByBrand = new Map<number, Set<number>>();
     const minPriceByBrand = new Map<number, number>();
+    const now = new Date();
     for (const v of variants) {
       const brandId = v.product.brandId!;
       const price = Number(v.price);
       if (!productIdsByBrand.has(brandId)) productIdsByBrand.set(brandId, new Set());
       productIdsByBrand.get(brandId)!.add(v.productId);
+      if (v.salePrice !== null && (!v.product.dealEndsAt || v.product.dealEndsAt > now)) {
+        if (!dealProductIdsByBrand.has(brandId)) dealProductIdsByBrand.set(brandId, new Set());
+        dealProductIdsByBrand.get(brandId)!.add(v.productId);
+      }
       if (!minPriceByBrand.has(brandId) || price < minPriceByBrand.get(brandId)!) minPriceByBrand.set(brandId, price);
     }
 
     return brands.map((b) => ({
       ...b,
       productCount: productIdsByBrand.get(b.id)?.size ?? 0,
+      dealCount: dealProductIdsByBrand.get(b.id)?.size ?? 0,
       priceFrom: minPriceByBrand.get(b.id) ?? null,
     }));
   }

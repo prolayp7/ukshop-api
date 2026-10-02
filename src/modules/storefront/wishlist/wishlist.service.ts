@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { UpdateWishlistAlertsDto } from './dto/update-wishlist-alerts.dto';
 
 const DEFAULT_SLUG = 'default';
 
@@ -53,6 +54,29 @@ export class WishlistService {
     const wishlist = await this.getOrCreate(userId);
     const result = await this.prisma.wishlistItem.deleteMany({ where: { wishlistId: wishlist.id, productVariantId } });
     if (!result.count) throw new NotFoundException('Item is not in the wishlist');
+    return this.getOrCreate(userId);
+  }
+
+  async updateAlerts(userId: number, productVariantId: number, dto: UpdateWishlistAlertsDto) {
+    const wishlist = await this.getOrCreate(userId);
+    const item = await this.prisma.wishlistItem.findFirst({
+      where: { wishlistId: wishlist.id, productVariantId },
+      include: { productVariant: { include: { product: { select: { dealEndsAt: true } } } } },
+    });
+    if (!item) throw new NotFoundException('Product is not in the wishlist');
+    const variant = item.productVariant;
+    const currentPrice = variant.salePrice && (!variant.product.dealEndsAt || variant.product.dealEndsAt > new Date())
+      ? variant.salePrice
+      : variant.price;
+    await this.prisma.wishlistItem.update({
+      where: { id: item.id },
+      data: {
+        notifyBackInStock: dto.notifyBackInStock,
+        backInStockAlertSentAt: dto.notifyBackInStock && variant.stockQty > 0 ? new Date() : null,
+        notifyPriceDrop: dto.notifyPriceDrop,
+        priceDropBaseline: dto.notifyPriceDrop ? currentPrice : null,
+      },
+    });
     return this.getOrCreate(userId);
   }
 }

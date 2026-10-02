@@ -14,7 +14,9 @@ import { mediaUploadDirectory } from '../../../bootstrap';
 import { buildInvoicePdf } from './invoice-pdf';
 import { EmailService } from '../../email/email.service';
 import { LowStockAlertService } from '../../email/low-stock-alert.service';
-import { orderConfirmationEmail, orderCancelledEmail } from '../../email/email-templates';
+import { WishlistAlertService } from '../../email/wishlist-alert.service';
+import { newPaidOrderEmail, orderConfirmationEmail, orderCancelledEmail, paymentFailedEmail } from '../../email/email-templates';
+import { resolveAdminEmail } from '../../email/admin-email.util';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const sharp = require('sharp');
@@ -43,6 +45,7 @@ export class OrdersService {
     private readonly couponsService: StorefrontCouponsService,
     private readonly emailService: EmailService,
     private readonly lowStockAlert: LowStockAlertService,
+    private readonly wishlistAlerts: WishlistAlertService,
   ) {}
 
   private async generateOrderNumber(): Promise<string> {
@@ -228,7 +231,10 @@ export class OrdersService {
     });
     if (!created) return this.findByUuid((await this.prisma.order.findUniqueOrThrow({ where: { checkoutKey: idempotencyKey } })).uuid);
 
-    for (const item of activeItems) void this.lowStockAlert.checkAndNotify(item.productVariantId);
+    for (const item of activeItems) {
+      void this.lowStockAlert.checkAndNotify(item.productVariantId);
+      void this.wishlistAlerts.checkVariant(item.productVariantId);
+    }
 
     return this.findByUuid(created.uuid);
   }
@@ -237,6 +243,16 @@ export class OrdersService {
     try {
       const order = await this.prisma.order.findUnique({ where: { id: orderId }, include: orderDetailInclude });
       if (!order || order.paymentStatus !== 'PAID' || !order.invoice) return;
+
+      try {
+        const adminEmail = await resolveAdminEmail(this.prisma);
+        if (adminEmail) {
+          const alert = newPaidOrderEmail({ orderNumber: order.orderNumber, customerEmail: order.email, itemCount: order.items.reduce((sum, item) => sum + item.quantity, 0), total: Number(order.total).toFixed(2) });
+          await this.emailService.send(adminEmail, alert.subject, alert.html);
+        }
+      } catch (error) {
+        this.logger.warn(`Paid order operations alert could not be prepared for order ${orderId}: ${(error as Error).message}`);
+      }
 
       const customer = order.userId
         ? await this.prisma.user.findUnique({ where: { id: order.userId }, select: { firstName: true } })
@@ -258,6 +274,17 @@ export class OrdersService {
       await this.emailService.send(order.email, confirmation.subject, confirmation.html, [{ filename: invoice.filename, content: invoice.buffer, contentType: 'application/pdf' }]);
     } catch (error) {
       this.logger.warn(`Paid order confirmation could not be prepared for order ${orderId}: ${(error as Error).message}`);
+    }
+  }
+
+  async sendPaymentFailedNotification(orderId: number, provider: string): Promise<void> {
+    try {
+      const order = await this.prisma.order.findUnique({ where: { id: orderId }, select: { email: true, orderNumber: true } });
+      if (!order) return;
+      const email = paymentFailedEmail({ orderNumber: order.orderNumber, provider });
+      void this.emailService.send(order.email, email.subject, email.html);
+    } catch (error) {
+      this.logger.warn(`Payment failure email could not be prepared for order ${orderId}: ${(error as Error).message}`);
     }
   }
 
@@ -337,7 +364,10 @@ export class OrdersService {
 
     const email = orderCancelledEmail({ orderNumber: updated.orderNumber });
     void this.emailService.send(updated.email, email.subject, email.html);
-    for (const item of order.items) void this.lowStockAlert.checkAndNotify(item.productVariantId);
+    for (const item of order.items) {
+      void this.lowStockAlert.checkAndNotify(item.productVariantId);
+      void this.wishlistAlerts.checkVariant(item.productVariantId);
+    }
 
     return updated;
   }

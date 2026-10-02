@@ -8,8 +8,8 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { UpsertSettingDto } from './dto/upsert-setting.dto';
 import { SaveIntegrationDto } from './dto/integration-settings.dto';
 
-const scopes = ['payment.paypal', 'payment.2checkout', 'payment.stripe', 'payment.skrill', 'delivery.fedex', 'delivery.evri', 'email.smtp'] as const;
-export type IntegrationScope = typeof scopes[number];
+const scopes = ['payment.paypal', 'payment.2checkout', 'payment.stripe', 'payment.skrill', 'email.smtp'] as const;
+export type IntegrationScope = typeof scopes[number] | 'delivery.fedex' | 'delivery.evri';
 type StoredIntegration = { encrypted: string; iv: string; tag: string; mode: 'SANDBOX' | 'LIVE'; enabled?: boolean; updatedAt: string };
 
 @Injectable()
@@ -34,7 +34,7 @@ export class SettingsService {
   }
 
   private assertScope(value: string): asserts value is IntegrationScope {
-    if (!scopes.includes(value as IntegrationScope)) throw new BadRequestException('Unknown integration');
+    if (!(scopes as readonly string[]).includes(value)) throw new BadRequestException('Unknown integration');
   }
 
   private encryptionKey() {

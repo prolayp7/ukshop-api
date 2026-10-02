@@ -677,12 +677,16 @@ model Wishlist {
 }
 
 model WishlistItem {
-  id               Int            @id @default(autoincrement())
-  wishlistId       Int            @map("wishlist_id")
-  wishlist         Wishlist       @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
-  productVariantId Int            @map("product_variant_id")
-  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
-  createdAt        DateTime       @default(now()) @map("created_at")
+  id                       Int            @id @default(autoincrement())
+  wishlistId               Int            @map("wishlist_id")
+  wishlist                 Wishlist       @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  productVariantId         Int            @map("product_variant_id")
+  productVariant           ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+  notifyBackInStock        Boolean        @default(false) @map("notify_back_in_stock")
+  backInStockAlertSentAt   DateTime?      @map("back_in_stock_alert_sent_at")
+  notifyPriceDrop          Boolean        @default(false) @map("notify_price_drop")
+  priceDropBaseline        Decimal?       @map("price_drop_baseline") @db.Decimal(10, 2)
+  createdAt                DateTime       @default(now()) @map("created_at")
 
   @@unique([wishlistId, productVariantId])
   @@index([productVariantId])
@@ -1073,10 +1077,13 @@ model ReturnEvent {
 }
 
 model NewsletterSubscriber {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  createdAt DateTime @default(now()) @map("created_at")
+  id               Int       @id @default(autoincrement())
+  email            String    @unique
+  unsubscribeToken String    @unique @default(uuid()) @map("unsubscribe_token")
+  unsubscribedAt   DateTime? @map("unsubscribed_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
 
+  @@index([unsubscribedAt])
   @@map("newsletter_subscribers")
 }
 

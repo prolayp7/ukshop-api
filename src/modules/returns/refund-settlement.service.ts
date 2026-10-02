@@ -3,6 +3,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { orderRefundedEmail } from '../email/email-templates';
+import { buildCreditNotePdf } from './credit-note-pdf';
 import { ReturnActor, ReturnsCoreService } from './returns-core.service';
 
 export type RefundOutcome = 'PROCESSED' | 'PROCESSING' | 'FAILED';
@@ -29,7 +30,27 @@ export class RefundSettlementService {
   ) {}
 
   async settle(refundId: number, outcome: 'PROCESSED' | 'FAILED', input: { providerRefundId?: string | null; payload?: unknown; failureReason?: string | null; actor: ReturnActor }): Promise<void> {
-    const refund = await this.prisma.paymentRefund.findUnique({ where: { id: refundId }, include: { order: { select: { id: true, orderNumber: true, email: true } } } });
+    const refund = await this.prisma.paymentRefund.findUnique({
+      where: { id: refundId },
+      include: {
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            email: true,
+            billingFullName: true,
+            billingCompanyName: true,
+            billingLine1: true,
+            billingLine2: true,
+            billingCity: true,
+            billingCounty: true,
+            billingPostcode: true,
+          },
+        },
+        transaction: { select: { amount: true, currency: true } },
+        returnRequest: { select: { returnNumber: true } },
+      },
+    });
     if (!refund || refund.status === outcome || refund.status === 'PROCESSED') return;
 
     await this.prisma.$transaction(async (tx) => {
@@ -60,11 +81,51 @@ export class RefundSettlementService {
     });
 
     if (outcome === 'PROCESSED') {
-      const email = orderRefundedEmail({ orderNumber: refund.order.orderNumber, refundAmount: Number(refund.amount).toFixed(2) });
-      void this.emailService.send(refund.order.email, email.subject, email.html);
+      const processed = await this.prisma.paymentRefund.aggregate({ where: { transactionId: refund.transactionId, status: 'PROCESSED' }, _sum: { amount: true } });
+      const refundType = Number(processed._sum.amount ?? 0) >= Number(refund.transaction.amount) - 0.001 ? 'FULL' : 'PARTIAL';
+      const email = orderRefundedEmail({ orderNumber: refund.order.orderNumber, refundAmount: Number(refund.amount).toFixed(2), refundType });
+      const creditNote = await this.renderCreditNote(refund);
+      void this.emailService.send(refund.order.email, email.subject, email.html, [{ filename: creditNote.filename, content: creditNote.buffer, contentType: 'application/pdf' }]);
     } else {
       this.logger.warn(`Refund ${refundId} failed: ${input.failureReason ?? 'declined'}`);
     }
+  }
+
+  private async renderCreditNote(refund: Awaited<ReturnType<PrismaService['paymentRefund']['findUnique']>> & { order: { [key: string]: any }; transaction: { amount: Prisma.Decimal; currency: string }; returnRequest?: { returnNumber: string } | null }) {
+    const row = await this.prisma.setting.findUnique({ where: { key: 'general.site' } });
+    const site = (row?.value ?? {}) as Record<string, string | undefined>;
+    const name = process.env.STORE_NAME || 'RigForge';
+    const creditNoteNumber = `CN-${String(refund.id).padStart(6, '0')}`;
+    const billingAddress = [
+      refund.order.billingLine1,
+      refund.order.billingLine2,
+      [refund.order.billingCity, refund.order.billingCounty, refund.order.billingPostcode].filter(Boolean).join(', '),
+    ].filter(Boolean).join(', ');
+    const buffer = await buildCreditNotePdf({
+      currency: refund.transaction.currency,
+      creditNoteNumber,
+      orderNumber: refund.order.orderNumber,
+      refundNumber: refund.returnRequest?.returnNumber ?? refund.providerRefundId ?? null,
+      issuedAt: new Date(),
+      customerEmail: refund.order.email,
+      amount: Number(refund.amount),
+      reason: refund.reason ?? (refund.returnRequest ? `Refund for return ${refund.returnRequest.returnNumber}` : 'Customer refund'),
+      company: {
+        name,
+        legalName: process.env.STORE_LEGAL_NAME || `${name} Ltd`,
+        address: site.companyAddress ?? '',
+        vatNumber: site.vatNumber ?? null,
+        email: site.supportEmail ?? '',
+        phone: site.supportPhone1 ?? '',
+        copyright: site.copyright || `© ${new Date().getFullYear()} ${process.env.STORE_LEGAL_NAME || `${name} Ltd`}`,
+      },
+      billing: {
+        name: refund.order.billingFullName,
+        company: refund.order.billingCompanyName ?? null,
+        address: billingAddress,
+      },
+    });
+    return { buffer, filename: `credit-note-${creditNoteNumber}.pdf` };
   }
 
   /** Payment status follows confirmed refunds only. */

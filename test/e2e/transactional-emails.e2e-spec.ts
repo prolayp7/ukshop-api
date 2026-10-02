@@ -3,6 +3,7 @@ import * as request from 'supertest';
 import { createTestApp } from './setup';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { EmailService } from '../../src/modules/email/email.service';
+import { PaymentAttemptsService } from '../../src/modules/payments/payment-attempts.service';
 import { loginAsSuperAdmin } from './helpers/admin-auth';
 import { registerCustomer } from './helpers/customer-auth';
 import { createReturn, inspectReturn } from './helpers/returns';
@@ -64,14 +65,27 @@ describe('Transactional email triggers (e2e)', () => {
     return { email, orderUuid: orderRes.body.data.uuid as string, customerToken };
   }
 
-  it('sends an order confirmation email on checkout', async () => {
-    const { email } = await placeOrder();
+  it('sends customer confirmation and a new-order alert after payment capture', async () => {
+    const { email, orderUuid } = await placeOrder();
+    const order = await prisma.order.findUniqueOrThrow({ where: { uuid: orderUuid } });
+    const attempt = await prisma.paymentAttempt.create({ data: {
+      orderId: order.id, provider: 'STRIPE', idempotencyKey: `email-paid-${Date.now()}-${Math.random()}`,
+      amount: order.total, currency: 'GBP', status: 'PROCESSING',
+    } });
 
-    expect(sendSpy).toHaveBeenCalledTimes(1);
-    const [to, subject, html] = sendSpy.mock.calls[0];
-    expect(to).toBe(email);
-    expect(subject).toMatch(/^Order confirmed/);
-    expect(html).toContain('has been received');
+    sendSpy.mockClear();
+    await app.get(PaymentAttemptsService).finalizeCapture(attempt.id, {
+      captured: true,
+      providerTransactionId: `email-payment-${order.uuid}`,
+      paidAmount: Number(order.total).toFixed(2),
+      paidCurrency: 'GBP',
+    });
+
+    expect(sendSpy).toHaveBeenCalledTimes(2);
+    const customerMail = sendSpy.mock.calls.find((call) => call[0] === email);
+    expect(customerMail?.[1]).toMatch(/^Order confirmed/);
+    expect(customerMail?.[2]).toContain('getting it ready');
+    expect(sendSpy.mock.calls.some((call) => String(call[1]).startsWith('New paid order'))).toBe(true);
   });
 
   it('sends a shipped email (with tracking) when admin marks the order SHIPPED', async () => {
@@ -127,6 +141,43 @@ describe('Transactional email triggers (e2e)', () => {
     expect(subject).toMatch(/^Order delivered/);
   });
 
+  it('sends dedicated return-approved and return-received emails', async () => {
+    const { email, orderUuid } = await placeOrder();
+    const order = await prisma.order.findUniqueOrThrow({ where: { uuid: orderUuid } });
+    const ret = await createReturn(prisma, order.id);
+
+    sendSpy.mockClear();
+    await request(app.getHttpServer()).post(`/api/v1/admin/returns/${ret.returnId}/approve`).set('Authorization', `Bearer ${adminToken}`).send({ items: [{ returnItemId: ret.returnItemId, quantity: ret.quantity }] }).expect(201);
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+    expect(sendSpy.mock.calls[0][0]).toBe(email);
+    expect(sendSpy.mock.calls[0][1]).toMatch(/^Return approved/);
+
+    sendSpy.mockClear();
+    await request(app.getHttpServer()).post(`/api/v1/admin/returns/${ret.returnId}/pickup`).set('Authorization', `Bearer ${adminToken}`).send({ courier: 'Evri', pickupDate: '2026-10-01', pickupWindow: '9am-1pm' }).expect(201);
+    await request(app.getHttpServer()).post(`/api/v1/admin/returns/${ret.returnId}/picked-up`).set('Authorization', `Bearer ${adminToken}`).send({}).expect(201);
+    await request(app.getHttpServer()).post(`/api/v1/admin/returns/${ret.returnId}/receive`).set('Authorization', `Bearer ${adminToken}`).send({ items: [{ returnItemId: ret.returnItemId, quantity: ret.quantity }] }).expect(201);
+    expect(sendSpy.mock.calls.some((call) => call[1] === `Return received - ${ret.returnId}`)).toBe(false);
+    expect(sendSpy.mock.calls.some((call) => String(call[1]).startsWith('Return received - RET-T'))).toBe(true);
+  });
+
+  it('sends a dedicated return-rejected email with the admin reason', async () => {
+    const { email, orderUuid } = await placeOrder();
+    const order = await prisma.order.findUniqueOrThrow({ where: { uuid: orderUuid } });
+    const ret = await createReturn(prisma, order.id);
+
+    sendSpy.mockClear();
+    await request(app.getHttpServer())
+      .post(`/api/v1/admin/returns/${ret.returnId}/reject`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ reason: 'Item was outside the return window.' })
+      .expect(201);
+
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+    expect(sendSpy.mock.calls[0][0]).toBe(email);
+    expect(sendSpy.mock.calls[0][1]).toMatch(/^Return update - RET-T/);
+    expect(sendSpy.mock.calls[0][2]).toContain('outside the return window');
+  });
+
   it('sends a refund email once a return is refunded', async () => {
     const { email, orderUuid } = await placeOrder();
     const order = await prisma.order.findUniqueOrThrow({ where: { uuid: orderUuid }, include: { items: true } });
@@ -146,7 +197,7 @@ describe('Transactional email triggers (e2e)', () => {
     expect(sendSpy).toHaveBeenCalledTimes(1);
     const [to, subject] = sendSpy.mock.calls[0];
     expect(to).toBe(email);
-    expect(subject).toMatch(/^Refund processed/);
+    expect(subject).toMatch(/^(Full|Partial) refund processed/);
   });
 
   it('emails the customer when an admin sends them a notification, and skips email for broadcast notifications', async () => {

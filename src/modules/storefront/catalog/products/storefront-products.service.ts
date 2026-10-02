@@ -380,11 +380,67 @@ export class StorefrontProductsService {
   async bestSellers(limit: number) {
     const sold = await this.prisma.orderItem.groupBy({
       by: ['productId'],
+      where: {
+        status: { notIn: ['CANCELLED', 'REFUNDED', 'RETURNED'] },
+        order: {
+          is: {
+            paymentStatus: { in: ['PAID', 'PARTIALLY_REFUNDED'] },
+            status: { notIn: ['CANCELLED', 'FAILED', 'RETURNED'] },
+          },
+        },
+      },
       _sum: { quantity: true },
       orderBy: { _sum: { quantity: 'desc' } },
       take: limit,
     });
     return this.byIds(sold.map((row) => row.productId));
+  }
+
+  async recordView(productId: number, sessionId: string) {
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, status: 'ACTIVE', deletedAt: null },
+      select: { id: true },
+    });
+    if (!product) return;
+
+    const existing = await this.prisma.browsingHistory.findFirst({ where: { productId, sessionId } });
+    if (existing) {
+      await this.prisma.browsingHistory.update({ where: { id: existing.id }, data: { viewedAt: new Date() } });
+      return;
+    }
+    await this.prisma.browsingHistory.create({ data: { productId, sessionId } });
+  }
+
+  async alsoViewed(productIds: number[], limit: number) {
+    const viewedIds = [...new Set(productIds)].filter((id) => Number.isInteger(id) && id > 0);
+    if (!viewedIds.length) return this.bestSellers(limit);
+
+    const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    const viewers = await this.prisma.browsingHistory.findMany({
+      where: { productId: { in: viewedIds }, sessionId: { not: null }, viewedAt: { gte: since } },
+      distinct: ['sessionId'],
+      select: { sessionId: true },
+    });
+    const sessionIds = viewers.flatMap((viewer) => viewer.sessionId ? [viewer.sessionId] : []);
+    const coViewed = sessionIds.length ? await this.prisma.browsingHistory.groupBy({
+      by: ['productId'],
+      where: {
+        sessionId: { in: sessionIds },
+        productId: { notIn: viewedIds },
+        viewedAt: { gte: since },
+        product: { is: { status: 'ACTIVE', deletedAt: null } },
+      },
+      _count: { sessionId: true },
+      orderBy: { _count: { sessionId: 'desc' } },
+      take: limit,
+    }) : [];
+    const coViewedIds = coViewed.map((row) => row.productId);
+    const products = await this.byIds(coViewedIds);
+    if (products.length >= limit) return products;
+
+    const fallback = await this.bestSellers(Math.min(12, limit + viewedIds.length));
+    const excluded = new Set([...viewedIds, ...coViewedIds]);
+    return [...products, ...fallback.filter((product) => !excluded.has(product.id))].slice(0, limit);
   }
 
   async topRated(limit: number) {
