@@ -1,3 +1,5 @@
+import { Revalidates } from '../../revalidation/revalidates.decorator';
+import { onHomepage } from '../../revalidation/resolvers';
 import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, UseGuards } from '@nestjs/common';
 import { AdminAuthGuard } from '../../../common/admin/admin-auth.guard';
 import { PermissionsGuard } from '../../../common/admin/permissions.guard';
@@ -17,12 +19,12 @@ export class HomepageSectionsController {
     return this.service.list();
   }
 
-  @Patch(':id')
+  @Revalidates(onHomepage) @Patch(':id')
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateHomepageSectionDto) {
     return this.service.update(id, dto);
   }
 
-  @Post('reorder')
+  @Revalidates(onHomepage) @Post('reorder')
   reorder(@Body() dto: ReorderHomepageSectionsDto) {
     return this.service.reorder(dto);
   }

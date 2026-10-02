@@ -1,3 +1,5 @@
+import { Revalidates } from '../../revalidation/revalidates.decorator';
+import { onReview } from '../../revalidation/resolvers';
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, Patch, Query, UseGuards } from '@nestjs/common';
 import { AdminAuthGuard } from '../../../common/admin/admin-auth.guard';
 import { PermissionsGuard } from '../../../common/admin/permissions.guard';
@@ -9,7 +11,7 @@ import { ReviewsService } from './reviews.service';
 export class ReviewsController {
   constructor(private readonly service: ReviewsService) {}
   @Get() list(@Query() query: ListReviewsQueryDto) { return this.service.list(query); }
-  @Patch(':id/approve') approve(@Param('id', ParseIntPipe) id: number) { return this.service.approve(id); }
-  @Patch(':id/reject') reject(@Param('id', ParseIntPipe) id: number, @Body() _dto: RejectReviewDto) { return this.service.reject(id); }
-  @Delete(':id') @HttpCode(204) async remove(@Param('id', ParseIntPipe) id: number): Promise<void> { await this.service.remove(id); }
+  @Revalidates(onReview) @Patch(':id/approve') approve(@Param('id', ParseIntPipe) id: number) { return this.service.approve(id); }
+  @Revalidates(onReview) @Patch(':id/reject') reject(@Param('id', ParseIntPipe) id: number, @Body() _dto: RejectReviewDto) { return this.service.reject(id); }
+  @Revalidates(onReview) @Delete(':id') @HttpCode(204) async remove(@Param('id', ParseIntPipe) id: number): Promise<void> { await this.service.remove(id); }
 }

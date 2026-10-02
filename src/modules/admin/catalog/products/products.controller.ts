@@ -1,3 +1,5 @@
+import { Revalidates } from '../../../revalidation/revalidates.decorator';
+import { onProduct, onProductImport } from '../../../revalidation/resolvers';
 import {
   Body,
   Controller,
@@ -42,13 +44,13 @@ export class ProductsController {
     return this.service.list(query);
   }
 
-  @Post()
+  @Revalidates(onProduct) @Post()
   @HttpCode(201)
   create(@Body() dto: CreateProductDto) {
     return this.service.create(dto);
   }
 
-  @Post('import')
+  @Revalidates(onProductImport) @Post('import')
   @HttpCode(200)
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024, files: 1 } }))
   import(@UploadedFile() file?: UploadedImportFile) {
@@ -65,24 +67,24 @@ export class ProductsController {
     return this.service.detail(id);
   }
 
-  @Patch(':id')
+  @Revalidates(onProduct) @Patch(':id')
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateProductDto) {
     return this.service.update(id, dto);
   }
 
-  @Post(':id/duplicate')
+  @Revalidates(onProduct) @Post(':id/duplicate')
   @HttpCode(201)
   duplicate(@Param('id', ParseIntPipe) id: number) {
     return this.service.duplicate(id);
   }
 
-  @Delete(':id')
+  @Revalidates(onProduct) @Delete(':id')
   @HttpCode(204)
   async remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
     await this.service.remove(id);
   }
 
-  @Post(':id/faqs')
+  @Revalidates(onProduct) @Post(':id/faqs')
   @HttpCode(201)
   addFaq(
     @Param('id', ParseIntPipe) id: number,
@@ -91,7 +93,7 @@ export class ProductsController {
     return this.service.addFaq(id, dto);
   }
 
-  @Delete(':id/faqs/:faqId')
+  @Revalidates(onProduct) @Delete(':id/faqs/:faqId')
   @HttpCode(204)
   async removeFaq(
     @Param('id', ParseIntPipe) id: number,
@@ -105,7 +107,7 @@ export class ProductsController {
     return this.service.listVariants(id);
   }
 
-  @Post(':id/variants')
+  @Revalidates(onProduct) @Post(':id/variants')
   @HttpCode(201)
   createVariant(
     @Param('id', ParseIntPipe) id: number,
@@ -114,7 +116,7 @@ export class ProductsController {
     return this.service.createVariant(id, dto);
   }
 
-  @Patch(':id/variants/:variantId')
+  @Revalidates(onProduct) @Patch(':id/variants/:variantId')
   updateVariant(
     @Param('id', ParseIntPipe) id: number,
     @Param('variantId', ParseIntPipe) variantId: number,
@@ -123,7 +125,7 @@ export class ProductsController {
     return this.service.updateVariant(id, variantId, dto);
   }
 
-  @Delete(':id/variants/:variantId')
+  @Revalidates(onProduct) @Delete(':id/variants/:variantId')
   @HttpCode(204)
   async removeVariant(
     @Param('id', ParseIntPipe) id: number,
@@ -132,7 +134,7 @@ export class ProductsController {
     await this.service.removeVariant(id, variantId);
   }
 
-  @Patch(':id/variants/:variantId/stock')
+  @Revalidates(onProduct) @Patch(':id/variants/:variantId/stock')
   updateStock(
     @Param('id', ParseIntPipe) id: number,
     @Param('variantId', ParseIntPipe) variantId: number,

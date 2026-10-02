@@ -1,3 +1,5 @@
+import { Revalidates } from '../../revalidation/revalidates.decorator';
+import { onSettings } from '../../revalidation/resolvers';
 import { Body, Controller, Get, Headers, Param, Post, Put, UseGuards } from '@nestjs/common';
 import { AdminAuthGuard } from '../../../common/admin/admin-auth.guard';
 import { AuthenticatedAdmin } from '../../../common/admin/admin-request';
@@ -32,12 +34,12 @@ export class SettingsController {
     return this.service.integration(admin.id, scope, token);
   }
 
-  @Put('integrations/:scope')
+  @Revalidates(onSettings) @Put('integrations/:scope')
   saveIntegration(@CurrentAdmin() admin: AuthenticatedAdmin, @Param('scope') scope: string, @Headers('x-settings-unlock') token: string | undefined, @Body() dto: SaveIntegrationDto) {
     return this.service.saveIntegration(admin.id, scope, token, dto);
   }
 
-  @Put(':key')
+  @Revalidates(onSettings) @Put(':key')
   upsert(@Param('key') key: string, @Body() dto: UpsertSettingDto) {
     return this.service.upsert(key, dto);
   }

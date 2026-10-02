@@ -103,14 +103,18 @@ export class OrdersService {
         user: { select: { id: true, email: true, firstName: true, lastName: true } },
         items: {
           where: { savedForLater: false },
-          include: { productVariant: { include: { product: { select: { id: true, title: true, slug: true } } } } },
+          include: { productVariant: { include: { product: { select: { id: true, title: true, slug: true, dealEndsAt: true } } } } },
           orderBy: { updatedAt: 'desc' },
         },
       },
     });
     const rows = carts.map((cart) => {
       const quantity = cart.items.reduce((sum, item) => sum + item.quantity, 0);
-      const value = cart.items.reduce((sum, item) => sum + Number(item.productVariant.salePrice ?? item.productVariant.price) * item.quantity, 0);
+      const value = cart.items.reduce((sum, item) => {
+        const { product, salePrice, price } = item.productVariant;
+        const currentSale = product.dealEndsAt && product.dealEndsAt <= new Date() ? null : salePrice;
+        return sum + Number(currentSale ?? price) * item.quantity;
+      }, 0);
       return {
         id: cart.id,
         customerType: cart.user ? 'REGISTERED' : 'GUEST',
@@ -123,7 +127,7 @@ export class OrdersService {
         items: cart.items.map((item) => ({
           id: item.id,
           quantity: item.quantity,
-          unitPrice: Number(item.productVariant.salePrice ?? item.productVariant.price),
+          unitPrice: Number(item.productVariant.product.dealEndsAt && item.productVariant.product.dealEndsAt <= new Date() ? item.productVariant.price : item.productVariant.salePrice ?? item.productVariant.price),
           variantId: item.productVariant.id,
           variantTitle: item.productVariant.title,
           product: item.productVariant.product,

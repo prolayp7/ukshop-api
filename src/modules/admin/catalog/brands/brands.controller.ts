@@ -1,3 +1,5 @@
+import { Revalidates } from '../../../revalidation/revalidates.decorator';
+import { onBrand } from '../../../revalidation/resolvers';
 import {
   Body,
   Controller,
@@ -35,18 +37,18 @@ export class BrandsController {
     return this.brandsService.detail(id);
   }
 
-  @Post()
+  @Revalidates(onBrand) @Post()
   @HttpCode(201)
   create(@Body() dto: CreateBrandDto) {
     return this.brandsService.create(dto);
   }
 
-  @Patch(':id')
+  @Revalidates(onBrand) @Patch(':id')
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateBrandDto) {
     return this.brandsService.update(id, dto);
   }
 
-  @Delete(':id')
+  @Revalidates(onBrand) @Delete(':id')
   @HttpCode(204)
   async remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
     await this.brandsService.remove(id);

@@ -73,7 +73,7 @@ export class ProductsService {
             ],
           }
         : {}),
-      ...(query.priceMin !== undefined || query.priceMax !== undefined || query.stockMin !== undefined || query.stockMax !== undefined ? { variants: { some: { deletedAt: null, ...(query.priceMin !== undefined || query.priceMax !== undefined ? { price: { ...(query.priceMin !== undefined ? { gte: query.priceMin } : {}), ...(query.priceMax !== undefined ? { lte: query.priceMax } : {}) } } : {}), ...(query.stockMin !== undefined || query.stockMax !== undefined ? { stockQty: { ...(query.stockMin !== undefined ? { gte: query.stockMin } : {}), ...(query.stockMax !== undefined ? { lte: query.stockMax } : {}) } } : {}) } } } : {}),
+      ...(query.priceMin !== undefined || query.priceMax !== undefined || query.stockMin !== undefined || query.stockMax !== undefined || query.onSale ? { variants: { some: { deletedAt: null, ...(query.onSale ? { salePrice: { not: null } } : {}), ...(query.priceMin !== undefined || query.priceMax !== undefined ? { price: { ...(query.priceMin !== undefined ? { gte: query.priceMin } : {}), ...(query.priceMax !== undefined ? { lte: query.priceMax } : {}) } } : {}), ...(query.stockMin !== undefined || query.stockMax !== undefined ? { stockQty: { ...(query.stockMin !== undefined ? { gte: query.stockMin } : {}), ...(query.stockMax !== undefined ? { lte: query.stockMax } : {}) } } : {}) } } } : {}),
     };
     const [products, total] = await Promise.all([
       this.prisma.product.findMany({
@@ -147,9 +147,10 @@ export class ProductsService {
   }
 
   private productData(dto: CreateProductDto | UpdateProductDto) {
-    const { secondaryCategoryIds: _secondaryCategoryIds, relatedProductIds: _relatedProductIds, shippingMethodIds: _shippingMethodIds, initialVariant: _initialVariant, compatibility: _compatibility, specsSummary, ...fields } = dto;
+    const { secondaryCategoryIds: _secondaryCategoryIds, relatedProductIds: _relatedProductIds, shippingMethodIds: _shippingMethodIds, initialVariant: _initialVariant, compatibility: _compatibility, specsSummary, dealEndsAt, ...fields } = dto;
     return {
       ...fields,
+      ...(dealEndsAt !== undefined ? { dealEndsAt: dealEndsAt === null ? null : new Date(dealEndsAt) } : {}),
       ...(specsSummary !== undefined
         ? { specsSummary: specsSummary as Prisma.InputJsonValue }
         : {}),

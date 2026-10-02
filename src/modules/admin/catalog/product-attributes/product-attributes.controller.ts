@@ -1,3 +1,5 @@
+import { Revalidates } from '../../../revalidation/revalidates.decorator';
+import { onProductAttributes } from '../../../revalidation/resolvers';
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, Patch, Post, UseGuards } from '@nestjs/common';
 import { AdminAuthGuard } from '../../../../common/admin/admin-auth.guard';
 import { PermissionsGuard } from '../../../../common/admin/permissions.guard';
@@ -19,24 +21,24 @@ export class ProductAttributesController {
     return this.service.list();
   }
 
-  @Post()
+  @Revalidates(onProductAttributes) @Post()
   @HttpCode(201)
   create(@Body() dto: CreateProductAttributeDto) {
     return this.service.create(dto);
   }
 
-  @Patch(':id')
+  @Revalidates(onProductAttributes) @Patch(':id')
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateProductAttributeDto) {
     return this.service.update(id, dto);
   }
 
-  @Delete(':id')
+  @Revalidates(onProductAttributes) @Delete(':id')
   @HttpCode(204)
   async remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
     await this.service.remove(id);
   }
 
-  @Post(':id/values')
+  @Revalidates(onProductAttributes) @Post(':id/values')
   @HttpCode(201)
   createValue(
     @Param('id', ParseIntPipe) id: number,
@@ -45,12 +47,12 @@ export class ProductAttributesController {
     return this.service.createValue(id, dto);
   }
 
-  @Patch(':id/values/:valueId')
+  @Revalidates(onProductAttributes) @Patch(':id/values/:valueId')
   updateValue(@Param('id', ParseIntPipe) id: number, @Param('valueId', ParseIntPipe) valueId: number, @Body() dto: UpdateProductAttributeValueDto) {
     return this.service.updateValue(id, valueId, dto);
   }
 
-  @Delete(':id/values/:valueId')
+  @Revalidates(onProductAttributes) @Delete(':id/values/:valueId')
   @HttpCode(204)
   async removeValue(@Param('id', ParseIntPipe) id: number, @Param('valueId', ParseIntPipe) valueId: number): Promise<void> {
     await this.service.removeValue(id, valueId);

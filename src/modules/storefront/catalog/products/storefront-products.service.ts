@@ -69,11 +69,12 @@ const listInclude = {
 
 type ListProduct = Prisma.ProductGetPayload<{ include: typeof listInclude }>;
 
-function pricingOf(variants: ListProduct['variants']) {
+function pricingOf(variants: ListProduct['variants'], dealEndsAt?: Date | null) {
   const primary = variants.find((v) => v.isDefault) ?? variants[0] ?? null;
+  const saleExpired = dealEndsAt !== null && dealEndsAt !== undefined && dealEndsAt.getTime() <= Date.now();
   return {
     price: primary?.price ?? null,
-    salePrice: primary?.salePrice ?? null,
+    salePrice: saleExpired ? null : primary?.salePrice ?? null,
     inStock: variants.some((v) => v.stockQty > 0),
     stockQty: variants.reduce((sum, v) => sum + v.stockQty, 0),
     // the variant a storefront "add to cart" click should use when the
@@ -204,7 +205,7 @@ export class StorefrontProductsService {
         ...rest,
         image: firstByProduct.get(product.id)?.url ?? null,
         reviewSummary: { average: reviewsByProduct.get(product.id)?._avg.rating ?? 0, count: reviewsByProduct.get(product.id)?._count.rating ?? 0 },
-        ...pricingOf(variants),
+        ...pricingOf(variants, rest.dealEndsAt),
       };
     });
   }
@@ -278,16 +279,18 @@ export class StorefrontProductsService {
     if (query.priceMin !== undefined || query.priceMax !== undefined || query.onSale || sort === 'price_asc' || sort === 'price_desc' || sort === 'discount_desc') {
       // Use the same primary-variant fallback as card pricing. Fetch full
       // product records only for the requested page, not for this projection.
-      const candidates = await this.prisma.product.findMany({ where, select: { id: true, variants: listInclude.variants } });
-      const price = (row: (typeof candidates)[number]) => Number(row.variants[0]?.salePrice ?? row.variants[0]?.price ?? 0);
+      const candidates = await this.prisma.product.findMany({ where, select: { id: true, dealEndsAt: true, variants: listInclude.variants } });
+      const hasActiveSale = (row: (typeof candidates)[number]) => row.variants[0]?.salePrice !== null
+        && (!row.dealEndsAt || row.dealEndsAt.getTime() > Date.now());
+      const price = (row: (typeof candidates)[number]) => Number(hasActiveSale(row) ? row.variants[0]?.salePrice : row.variants[0]?.price ?? 0);
       const discount = (row: (typeof candidates)[number]) => {
         const full = Number(row.variants[0]?.price ?? 0);
-        const sale = row.variants[0]?.salePrice !== null && row.variants[0]?.salePrice !== undefined ? Number(row.variants[0].salePrice) : null;
+        const sale = hasActiveSale(row) ? Number(row.variants[0]?.salePrice) : null;
         return sale !== null && full > 0 ? (full - sale) / full : 0;
       };
       const matching = candidates.filter((row) => row.variants.length > 0
-        && (!query.onSale || row.variants[0].salePrice !== null)
-        && (sort !== 'discount_desc' || row.variants[0].salePrice !== null)
+        && (!query.onSale || hasActiveSale(row))
+        && (sort !== 'discount_desc' || hasActiveSale(row))
         && (query.priceMin === undefined || price(row) >= query.priceMin)
         && (query.priceMax === undefined || price(row) <= query.priceMax));
       if (sort === 'price_asc' || sort === 'price_desc') {
@@ -450,9 +453,10 @@ export class StorefrontProductsService {
       images: productMedia.filter((m) => !documents.includes(m)).map((m) => ({ url: m.url, altText: m.altText })),
       variants: product.variants.map((variant) => ({
         ...variant,
+        salePrice: product.dealEndsAt && product.dealEndsAt <= new Date() ? null : variant.salePrice,
         images: (variantMediaByVariant.get(variant.id) ?? []).map((m) => ({ url: m.url, altText: m.altText })),
       })),
-      ...pricingOf(product.variants),
+      ...pricingOf(product.variants, product.dealEndsAt),
       reviewSummary: {
         average: reviewAgg._avg.rating ?? 0,
         count: reviewAgg._count.rating,

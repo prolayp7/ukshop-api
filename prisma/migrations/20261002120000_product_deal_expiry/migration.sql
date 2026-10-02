@@ -1,0 +1,1 @@
+ALTER TABLE "products" ADD COLUMN "deal_ends_at" TIMESTAMP(3);

@@ -85,7 +85,8 @@ export class OrdersService {
       if (item.quantity > variant.stockQty) {
         throw new BadRequestException(`"${variant.product.title}" only has ${variant.stockQty} in stock`);
       }
-      const unitPrice = Number(variant.salePrice ?? variant.price);
+      const salePrice = variant.product.dealEndsAt && variant.product.dealEndsAt <= new Date() ? null : variant.salePrice;
+      const unitPrice = Number(salePrice ?? variant.price);
       const vatRatePercent = Number(variant.product.taxRate?.ratePercent ?? 0);
       const subtotal = round2(unitPrice * item.quantity);
       // Catalogue prices are VAT-inclusive (matches every storefront price
@@ -103,7 +104,7 @@ export class OrdersService {
         vatRatePercent,
         vatAmount,
         subtotal,
-        onSale: variant.salePrice !== null,
+        onSale: salePrice !== null,
         weightKg: Number(variant.weightKg ?? 0) * item.quantity,
       };
     });

@@ -31,5 +31,10 @@ export class ListProductsQueryDto extends PaginationQueryDto {
   @IsOptional()
   @Transform(({ value }) => value === 'true')
   @IsBoolean()
+  onSale?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => value === 'true')
+  @IsBoolean()
   includeDeleted?: boolean;
 }

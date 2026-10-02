@@ -52,6 +52,7 @@ import { AdminNewsletterModule } from './modules/admin/newsletter/newsletter.mod
 import { EmailModule } from './modules/email/email.module';
 import { StorefrontMerchandisingModule } from './modules/storefront/merchandising/storefront-merchandising.module';
 import { StorefrontCmsModule } from './modules/storefront/cms/storefront-cms.module';
+import { RevalidationModule } from './modules/revalidation/revalidation.module';
 
 @Module({
   imports: [
@@ -70,6 +71,7 @@ import { StorefrontCmsModule } from './modules/storefront/cms/storefront-cms.mod
     }),
     PrismaModule,
     AuditModule,
+    RevalidationModule,
     EmailModule,
     AdminCoreModule,
     AdminAuthModule,

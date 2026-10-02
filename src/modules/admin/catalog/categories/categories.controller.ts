@@ -1,3 +1,5 @@
+import { Revalidates } from '../../../revalidation/revalidates.decorator';
+import { onCategory } from '../../../revalidation/resolvers';
 import {
   Body,
   Controller,
@@ -35,18 +37,18 @@ export class CategoriesController {
     return this.categoriesService.detail(id);
   }
 
-  @Post()
+  @Revalidates(onCategory) @Post()
   @HttpCode(201)
   create(@Body() dto: CreateCategoryDto) {
     return this.categoriesService.create(dto);
   }
 
-  @Patch(':id')
+  @Revalidates(onCategory) @Patch(':id')
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateCategoryDto) {
     return this.categoriesService.update(id, dto);
   }
 
-  @Delete(':id')
+  @Revalidates(onCategory) @Delete(':id')
   @HttpCode(204)
   async remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
     await this.categoriesService.remove(id);

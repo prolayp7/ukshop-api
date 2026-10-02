@@ -466,6 +466,7 @@ model Product {
   status                    ProductStatus     @default(DRAFT)
   isFeatured                Boolean           @default(false) @map("is_featured")
   isTopProduct              Boolean           @default(false) @map("is_top_product")
+  dealEndsAt                DateTime?         @map("deal_ends_at")
   isIndexable               Boolean           @default(true) @map("is_indexable")
   metaTitle                 String?           @map("meta_title")
   metaDescription           String?           @map("meta_description")

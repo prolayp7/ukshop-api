@@ -11,7 +11,7 @@ const cartInclude = {
       productVariant: {
         include: {
           product: {
-            select: { id: true, title: true, slug: true, taxRateId: true, taxRate: { select: { ratePercent: true } } },
+            select: { id: true, title: true, slug: true, dealEndsAt: true, taxRateId: true, taxRate: { select: { ratePercent: true } } },
           },
         },
       },
@@ -66,7 +66,8 @@ export class CartService {
 
   private lineOf(item: CartWithItems['items'][number]): CartLine {
     const variant = item.productVariant;
-    const unitPrice = Number(variant.salePrice ?? variant.price);
+    const salePrice = variant.product.dealEndsAt && variant.product.dealEndsAt <= new Date() ? null : variant.salePrice;
+    const unitPrice = Number(salePrice ?? variant.price);
     return {
       productVariantId: variant.id,
       productId: variant.product.id,
@@ -74,7 +75,7 @@ export class CartService {
       unitPrice,
       lineSubtotal: Math.round(unitPrice * item.quantity * 100) / 100,
       weightKg: Number(variant.weightKg ?? 0) * item.quantity,
-      onSale: variant.salePrice !== null,
+      onSale: salePrice !== null,
       taxRateId: variant.product.taxRateId,
     };
   }
@@ -98,11 +99,12 @@ export class CartService {
 
   private variantSummary(item: CartWithItems['items'][number]) {
     const variant = item.productVariant;
+    const salePrice = variant.product.dealEndsAt && variant.product.dealEndsAt <= new Date() ? null : variant.salePrice;
     return {
       id: variant.id,
       title: variant.title,
       price: variant.price,
-      salePrice: variant.salePrice,
+      salePrice,
       stockQty: variant.stockQty,
       product: variant.product,
     };

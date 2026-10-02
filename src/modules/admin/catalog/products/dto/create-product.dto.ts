@@ -208,6 +208,10 @@ export class CreateProductDto {
   availabilityDate?: string;
 
   @IsOptional()
+  @IsDateString()
+  dealEndsAt?: string | null;
+
+  @IsOptional()
   @IsIn(['NONE', 'DEFAULT', 'SPECIFIC'])
   deliveryTimeMode?: 'NONE' | 'DEFAULT' | 'SPECIFIC';
 
