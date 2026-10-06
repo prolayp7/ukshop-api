@@ -11,11 +11,11 @@ const prisma = {
 describe('revalidation targets', () => {
   it('clears a product page, its category chain, brand page and cross-catalogue lists', async () => {
     const { tags } = await productTarget(prisma, [7, undefined, 7]);
-    expect(tags).toEqual(['products', 'homepage', 'product:7', 'product-slug:rog-strix', 'brand-slug:asus', 'category-slug:gaming-pcs', 'category-slug:computers']);
+    expect(tags).toEqual(['products', 'brands', 'homepage', 'product:7', 'product-slug:rog-strix', 'brand-slug:asus', 'category-slug:gaming-pcs', 'category-slug:computers']);
   });
 
   it('still clears the lists when the product id is unknown', async () => {
-    expect((await productTarget(prisma, [999])).tags).toEqual(['products', 'homepage']);
+    expect((await productTarget(prisma, [999])).tags).toEqual(['products', 'brands', 'homepage']);
   });
 
   it('maps an image to its owner', async () => {
