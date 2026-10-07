@@ -901,6 +901,7 @@ model Order {
   reviews              Review[]
   paymentTransactions  PaymentTransaction[]
   paymentAttempts      PaymentAttempt[]
+  paymentReminderLinks PaymentReminderLink[]
   paymentRefunds       PaymentRefund[]
   returnRequests       ReturnRequest[]
   paymentDisputes      PaymentDispute[]
@@ -1167,6 +1168,20 @@ model PaymentAttempt {
   @@index([orderId, createdAt])
   @@index([status, createdAt])
   @@map("payment_attempts")
+}
+
+model PaymentReminderLink {
+  id        Int       @id @default(autoincrement())
+  orderId   Int       @map("order_id")
+  order     Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([orderId, createdAt])
+  @@index([expiresAt])
+  @@map("payment_reminder_links")
 }
 
 model PaymentStateHistory {

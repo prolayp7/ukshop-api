@@ -1,12 +1,16 @@
-import { BadRequestException, Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Headers, Header, Param, Post, Query } from '@nestjs/common';
 import { CapturePaymentAttemptDto } from './dto/capture-payment-attempt.dto';
 import { CreatePaymentAttemptDto } from './dto/create-payment-attempt.dto';
 import { PaymentStatusQueryDto } from './dto/payment-status-query.dto';
 import { PaymentAttemptsService } from './payment-attempts.service';
+import { PaymentReminderLinksService } from './payment-reminder-links.service';
 
 @Controller('payments')
 export class PaymentsController {
-  constructor(private readonly attempts: PaymentAttemptsService) {}
+  constructor(
+    private readonly attempts: PaymentAttemptsService,
+    private readonly reminders: PaymentReminderLinksService,
+  ) {}
 
   @Get('methods')
   methods() {
@@ -24,6 +28,12 @@ export class PaymentsController {
   @Get('attempts/:uuid')
   status(@Param('uuid') uuid: string, @Query() query: PaymentStatusQueryDto) {
     return this.attempts.status(uuid, query.email);
+  }
+
+  @Get('reminder-links/:token')
+  @Header('Cache-Control', 'no-store, private')
+  paymentReminder(@Param('token') token: string) {
+    return this.reminders.getOrder(token);
   }
 
   @Post('attempts/:uuid/capture')

@@ -9,6 +9,7 @@ import { UpdateTrackingDto } from './dto/update-tracking.dto';
 import { UpdateOrderItemStatusDto } from './dto/update-order-item-status.dto';
 import { EmailService } from '../../email/email.service';
 import { orderDeliveredEmail, orderShippedEmail } from '../../email/email-templates';
+import { PaymentReminderLinksService } from '../../payments/payment-reminder-links.service';
 
 const detailInclude = {
   user: { select: { id: true, email: true, firstName: true, lastName: true } },
@@ -24,6 +25,7 @@ export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly paymentReminders: PaymentReminderLinksService,
   ) {}
 
   async summary() {
@@ -160,6 +162,10 @@ export class OrdersService {
     const order = await this.prisma.order.findUnique({ where: { id }, include: detailInclude });
     if (!order) throw new NotFoundException('Order not found');
     return order;
+  }
+
+  async sendPaymentReminder(id: number) {
+    return this.paymentReminders.sendForOrder(id);
   }
 
   async updateStatus(id: number, adminId: number, dto: UpdateOrderStatusDto) {

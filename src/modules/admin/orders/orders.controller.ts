@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { AdminAuthGuard } from '../../../common/admin/admin-auth.guard';
 import { AuthenticatedAdmin } from '../../../common/admin/admin-request';
 import { CurrentAdmin } from '../../../common/admin/current-admin.decorator';
@@ -22,6 +22,11 @@ export class OrdersController {
   @Get('summary') summary() { return this.service.summary(); }
   @Get('abandoned-carts') abandonedCarts(@Query() query: ListAbandonedCartsQueryDto) { return this.service.abandonedCarts(query); }
   @Get(':id') detail(@Param('id', ParseIntPipe) id: number) { return this.service.detail(id); }
+
+  @Post(':id/payment-reminder')
+  sendPaymentReminder(@Param('id', ParseIntPipe) id: number) {
+    return this.service.sendPaymentReminder(id);
+  }
 
   @Patch(':id/status')
   updateStatus(@Param('id', ParseIntPipe) id: number, @CurrentAdmin() admin: AuthenticatedAdmin, @Body() dto: UpdateOrderStatusDto) {

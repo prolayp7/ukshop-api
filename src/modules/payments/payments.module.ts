@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { PaymentAttemptsService } from './payment-attempts.service';
+import { PaymentReminderLinksService } from './payment-reminder-links.service';
 import { PaymentStateService } from './payment-state.service';
 import { PaymentsController } from './payments.controller';
 import { PaymentWebhooksController } from './payment-webhooks.controller';
@@ -14,7 +15,7 @@ import { ReturnsCoreModule } from '../returns/returns-core.module';
 @Module({
   imports: [SettingsModule, OrdersModule, ReturnsCoreModule],
   controllers: [PaymentsController, PaymentWebhooksController],
-  providers: [PaymentAttemptsService, PaymentStateService, PaypalGatewayService, StripeGatewayService, PaymentWebhooksService, PaymentReconciliationService],
-  exports: [PaymentAttemptsService, PaymentStateService, StripeGatewayService, PaypalGatewayService],
+  providers: [PaymentAttemptsService, PaymentReminderLinksService, PaymentStateService, PaypalGatewayService, StripeGatewayService, PaymentWebhooksService, PaymentReconciliationService],
+  exports: [PaymentAttemptsService, PaymentReminderLinksService, PaymentStateService, StripeGatewayService, PaypalGatewayService],
 })
 export class PaymentsModule {}

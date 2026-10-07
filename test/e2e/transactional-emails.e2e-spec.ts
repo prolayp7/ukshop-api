@@ -1,4 +1,5 @@
 import { INestApplication } from '@nestjs/common';
+import { createHash } from 'crypto';
 import * as request from 'supertest';
 import { createTestApp } from './setup';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -115,6 +116,92 @@ describe('Transactional email triggers (e2e)', () => {
     expect(to).toBe(email);
     expect(subject).toMatch(/^Your order has shipped/);
     expect(html).toContain('DHL999');
+  });
+
+  it('sends a payment reminder with an expiring link that can resume an unpaid order', async () => {
+    const { email, orderUuid } = await placeOrder();
+    const order = await prisma.order.findUniqueOrThrow({ where: { uuid: orderUuid }, include: { items: true } });
+    sendSpy.mockClear();
+
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/admin/orders/' + order.id + '/payment-reminder')
+      .set('Authorization', 'Bearer ' + adminToken)
+      .expect(201);
+
+    expect(response.body.data.sentTo).toBe(email);
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+    const sentMail = sendSpy.mock.calls[0];
+    expect(sentMail[0]).toBe(email);
+    expect(sentMail[1]).toBe('Payment reminder - ' + order.orderNumber);
+    expect(sentMail[2]).toContain(order.orderNumber);
+    expect(sentMail[2]).toContain(order.items[0].titleSnapshot);
+
+    const token = /paymentReminder=([A-Za-z0-9_-]{43})/.exec(sentMail[2])?.[1];
+    expect(token).toBeDefined();
+    const link = await prisma.paymentReminderLink.findUniqueOrThrow({
+      where: { tokenHash: createHash('sha256').update(token!).digest('hex') },
+    });
+    expect(link.tokenHash).not.toBe(token);
+    expect(link.expiresAt.getTime()).toBeGreaterThan(Date.now());
+
+    const resumed = await request(app.getHttpServer())
+      .get('/api/v1/payments/reminder-links/' + token)
+      .expect(200);
+    expect(resumed.headers['cache-control']).toContain('no-store');
+    expect(resumed.body.data.email).toBe(email);
+    expect(resumed.body.data.orderNumber).toBe(order.orderNumber);
+    expect(resumed.body.data.items).toHaveLength(order.items.length);
+  });
+
+  it('rejects an expired payment reminder link', async () => {
+    const { orderUuid } = await placeOrder();
+    const order = await prisma.order.findUniqueOrThrow({ where: { uuid: orderUuid } });
+    sendSpy.mockClear();
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/admin/orders/' + order.id + '/payment-reminder')
+      .set('Authorization', 'Bearer ' + adminToken)
+      .expect(201);
+    const token = /paymentReminder=([A-Za-z0-9_-]{43})/.exec(sendSpy.mock.calls[0][2])?.[1];
+    expect(token).toBeDefined();
+    const link = await prisma.paymentReminderLink.findUniqueOrThrow({
+      where: { tokenHash: createHash('sha256').update(token!).digest('hex') },
+    });
+    await prisma.paymentReminderLink.update({
+      where: { id: link.id },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+
+    await request(app.getHttpServer())
+      .get('/api/v1/payments/reminder-links/' + token)
+      .expect(404);
+    expect(response.body.data.sentTo).toBe(order.email);
+  });
+
+  it('rejects reminders for orders that are already paid', async () => {
+    const { orderUuid } = await placeOrder();
+    const order = await prisma.order.findUniqueOrThrow({ where: { uuid: orderUuid } });
+    await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: 'PAID' } });
+
+    await request(app.getHttpServer())
+      .post('/api/v1/admin/orders/' + order.id + '/payment-reminder')
+      .set('Authorization', 'Bearer ' + adminToken)
+      .expect(409);
+    expect(sendSpy).not.toHaveBeenCalled();
+  });
+
+  it('revokes a reminder token when the email cannot be sent', async () => {
+    const { orderUuid } = await placeOrder();
+    const order = await prisma.order.findUniqueOrThrow({ where: { uuid: orderUuid } });
+    sendSpy.mockClear();
+    sendSpy.mockResolvedValue(false);
+
+    await request(app.getHttpServer())
+      .post('/api/v1/admin/orders/' + order.id + '/payment-reminder')
+      .set('Authorization', 'Bearer ' + adminToken)
+      .expect(503);
+
+    const reminder = await prisma.paymentReminderLink.findFirstOrThrow({ where: { orderId: order.id } });
+    expect(reminder.revokedAt).not.toBeNull();
   });
 
   it('sends a delivered email when admin marks the order DELIVERED', async () => {

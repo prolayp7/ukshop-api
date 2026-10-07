@@ -207,6 +207,37 @@ export function orderConfirmationEmail(params: {
   return { subject: `Order confirmed - ${params.orderNumber}`, html: shell(`Order confirmed - ${params.orderNumber}`, `Order ${params.orderNumber} is confirmed and being prepared.`, body) };
 }
 
+export function paymentReminderEmail(params: {
+  orderNumber: string;
+  placedAt: Date;
+  items: EmailItem[];
+  subtotal: number;
+  discount: number;
+  shipping: number;
+  vat: number;
+  total: number;
+  paymentUrl: string;
+  expiresAt: Date;
+}) {
+  let body = contentOpen();
+  body += badge('Payment required', C.amberSoft, C.amberDark);
+  body += h1('Complete your payment');
+  body += p(`We haven&rsquo;t received payment for order <b>${esc(params.orderNumber)}</b>. Choose a payment method using the secure link below.`);
+  body += factRow([
+    ['Order number', esc(params.orderNumber)],
+    ['Order date', params.placedAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })],
+  ]);
+  body += itemsBlock(params.items);
+  const totalRows: [string, string][] = [['Subtotal', money(params.subtotal)]];
+  if (params.discount > 0) totalRows.push(['Discount', `−${money(params.discount)}`]);
+  totalRows.push(['Delivery', money(params.shipping)]);
+  body += totals(totalRows, 'Amount due', money(params.total), `Includes VAT of ${money(params.vat)}`);
+  body += button('Continue to payment', params.paymentUrl, { margin: '26px 0 12px' });
+  body += p(`This secure link expires on ${params.expiresAt.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}. If you have already paid, you can ignore this email.`, { size: 12.5, margin: '0' });
+  body += contentClose();
+  return { subject: `Payment reminder - ${params.orderNumber}`, html: shell(`Payment reminder - ${params.orderNumber}`, `Complete payment for order ${params.orderNumber}.`, body) };
+}
+
 export function orderShippedEmail(params: {
   orderNumber: string;
   orderUuid: string;
