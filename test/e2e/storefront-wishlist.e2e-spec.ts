@@ -27,6 +27,19 @@ describe('Storefront Wishlist (e2e)', () => {
     await request(app.getHttpServer()).get('/api/v1/wishlist').expect(401);
   });
 
+  it('handles concurrent first reads for a new wishlist', async () => {
+    const email = `wishlist-concurrent-${Date.now()}@example.com`;
+    const { accessToken: concurrentToken } = await registerCustomer(app, { email, password: 'SuperSecret123!', firstName: 'Wish', lastName: 'List' });
+    const responses = await Promise.all(Array.from({ length: 5 }, () =>
+      request(app.getHttpServer()).get('/api/v1/wishlist').set('Authorization', `Bearer ${concurrentToken}`),
+    ));
+
+    for (const response of responses) {
+      expect(response.status).toBe(200);
+      expect(response.body.data.items).toHaveLength(0);
+    }
+  });
+
   it('starts empty, adds, dedupes, and removes an item', async () => {
     const auth = (req: request.Test) => req.set('Authorization', `Bearer ${accessToken}`);
 

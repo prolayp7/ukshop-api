@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { UpdateWishlistAlertsDto } from './dto/update-wishlist-alerts.dto';
 
@@ -20,15 +21,20 @@ export class WishlistService {
   constructor(private readonly prisma: PrismaService) {}
 
   private async getOrCreate(userId: number) {
-    const existing = await this.prisma.wishlist.findUnique({
-      where: { userId_slug: { userId, slug: DEFAULT_SLUG } },
-      include: itemInclude,
-    });
-    if (existing) return existing;
-    return this.prisma.wishlist.create({
-      data: { userId, slug: DEFAULT_SLUG },
-      include: itemInclude,
-    });
+    const where = { userId_slug: { userId, slug: DEFAULT_SLUG } };
+    try {
+      return await this.prisma.wishlist.upsert({
+        where,
+        create: { userId, slug: DEFAULT_SLUG },
+        update: {},
+        include: itemInclude,
+      });
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error;
+      const existing = await this.prisma.wishlist.findUnique({ where, include: itemInclude });
+      if (existing) return existing;
+      throw error;
+    }
   }
 
   async get(userId: number) {

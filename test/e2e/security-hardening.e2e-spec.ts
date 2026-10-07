@@ -33,10 +33,12 @@ describe('CORS (e2e)', () => {
 describe('Rate limiting (e2e)', () => {
   let app: INestApplication;
   const originalLimit = process.env.THROTTLE_LIMIT;
+  const originalTrustProxyHops = process.env.TRUST_PROXY_HOPS;
 
   beforeAll(async () => {
     process.env.THROTTLE_LIMIT = '3';
     process.env.THROTTLE_TTL_MS = '60000';
+    process.env.TRUST_PROXY_HOPS = '1';
     ({ app } = await createTestApp());
   });
 
@@ -44,6 +46,8 @@ describe('Rate limiting (e2e)', () => {
     await app.close();
     if (originalLimit === undefined) delete process.env.THROTTLE_LIMIT;
     else process.env.THROTTLE_LIMIT = originalLimit;
+    if (originalTrustProxyHops === undefined) delete process.env.TRUST_PROXY_HOPS;
+    else process.env.TRUST_PROXY_HOPS = originalTrustProxyHops;
   });
 
   it('returns 429 once a client exceeds the configured per-window limit', async () => {
@@ -55,5 +59,16 @@ describe('Rate limiting (e2e)', () => {
     }
     expect(statuses.slice(0, 3)).toEqual([200, 200, 200]);
     expect(statuses.slice(3)).toEqual([429, 429]);
+  });
+
+  it('applies the limit independently to trusted forwarded client IPs', async () => {
+    const server = app.getHttpServer();
+    const requestFrom = (ip: string) => request(server).get('/api/v1/categories').set('x-forwarded-for', ip);
+
+    await requestFrom('198.51.100.10').expect(200);
+    await requestFrom('198.51.100.10').expect(200);
+    await requestFrom('198.51.100.10').expect(200);
+    await requestFrom('198.51.100.10').expect(429);
+    await requestFrom('198.51.100.11').expect(200);
   });
 });
