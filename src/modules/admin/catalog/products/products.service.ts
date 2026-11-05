@@ -149,9 +149,10 @@ export class ProductsService {
   }
 
   private productData(dto: CreateProductDto | UpdateProductDto) {
-    const { secondaryCategoryIds: _secondaryCategoryIds, relatedProductIds: _relatedProductIds, shippingMethodIds: _shippingMethodIds, initialVariant: _initialVariant, compatibility: _compatibility, specsSummary, dealEndsAt, ...fields } = dto;
+    const { secondaryCategoryIds: _secondaryCategoryIds, relatedProductIds: _relatedProductIds, shippingMethodIds: _shippingMethodIds, initialVariant: _initialVariant, compatibility: _compatibility, specsSummary, availabilityDate, dealEndsAt, ...fields } = dto;
     return {
       ...fields,
+      ...(availabilityDate !== undefined ? { availabilityDate: new Date(availabilityDate) } : {}),
       ...(dealEndsAt !== undefined ? { dealEndsAt: dealEndsAt === null ? null : new Date(dealEndsAt) } : {}),
       ...(specsSummary !== undefined
         ? { specsSummary: specsSummary as Prisma.InputJsonValue }
