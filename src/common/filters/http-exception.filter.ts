@@ -3,8 +3,9 @@ import {
   Catch,
   ExceptionFilter,
   HttpException,
+  Logger,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 
 const STATUS_CODE_MAP: Record<number, string> = {
   400: 'BAD_REQUEST',
@@ -20,8 +21,11 @@ const STATUS_CODE_MAP: Record<number, string> = {
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(HttpExceptionFilter.name);
+
   catch(exception: unknown, host: ArgumentsHost): void {
-    const response = host.switchToHttp().getResponse<Response>();
+    const httpContext = host.switchToHttp();
+    const response = httpContext.getResponse<Response>();
 
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
@@ -44,6 +48,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
       response.status(status).json({ error: { code, message, details } });
     } else {
+      const request = httpContext.getRequest<Request>();
+      const message = exception instanceof Error ? exception.message : String(exception);
+      const stack = exception instanceof Error ? exception.stack : undefined;
+      this.logger.error(
+        `${request.method} ${request.path} failed with an unhandled exception: ${message}`,
+        stack,
+      );
       response.status(500).json({
         error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
       });

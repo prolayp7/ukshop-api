@@ -1,4 +1,4 @@
-import { ArgumentsHost } from '@nestjs/common';
+import { ArgumentsHost, Logger } from '@nestjs/common';
 import { NotFoundException } from '@nestjs/common';
 import { HttpExceptionFilter } from './http-exception.filter';
 
@@ -6,9 +6,11 @@ describe('HttpExceptionFilter', () => {
   let filter: HttpExceptionFilter;
   let mockResponse: any;
   let mockHost: any;
+  let loggerError: jest.SpyInstance;
 
   beforeEach(() => {
     filter = new HttpExceptionFilter();
+    loggerError = jest.spyOn(Logger.prototype, 'error').mockImplementation();
 
     mockResponse = {
       status: jest.fn().mockReturnThis(),
@@ -18,8 +20,13 @@ describe('HttpExceptionFilter', () => {
     mockHost = {
       switchToHttp: jest.fn().mockReturnValue({
         getResponse: jest.fn().mockReturnValue(mockResponse),
+        getRequest: jest.fn().mockReturnValue({ method: 'PATCH', path: '/api/v1/admin/products/620' }),
       }),
     } as unknown as ArgumentsHost;
+  });
+
+  afterEach(() => {
+    loggerError.mockRestore();
   });
 
   it('should handle non-HttpException errors with 500 and error envelope', () => {
@@ -31,6 +38,10 @@ describe('HttpExceptionFilter', () => {
     expect(mockResponse.json).toHaveBeenCalledWith({
       error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
     });
+    expect(loggerError).toHaveBeenCalledWith(
+      'PATCH /api/v1/admin/products/620 failed with an unhandled exception: boom',
+      error.stack,
+    );
   });
 
   it('should handle HttpException (NotFoundException) with correct status and envelope', () => {
