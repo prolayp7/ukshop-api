@@ -167,7 +167,7 @@ export async function seedProducts(prisma: PrismaClient) {
           customizationInstructions: ['computers', 'gaming-pcs', 'desktop-pcs', 'workstations'].includes(categorySlug) ? 'Contact support before dispatch to discuss compatible memory and storage upgrades.' : null,
           costPrice: money(retailPrice * 0.72), minimumOrderQuantity: 1, stockLocation: `WH-A-${String((sequence % 12) + 1).padStart(2, '0')}`,
           receiveLowStockAlert: true, outOfStockBehavior: 'DENY', inStockLabel: 'In stock – UK dispatch', outOfStockLabel: 'Temporarily unavailable',
-          availabilityDate: new Date('2026-08-31T00:00:00.000Z'), deliveryTimeMode: 'CUSTOM', inStockDeliveryTime: '1–3 working days', outOfStockDeliveryTime: 'Usually available within 7–14 working days',
+          availabilityDate: new Date('2026-08-31T00:00:00.000Z'), deliveryTimeMode: 'SPECIFIC', inStockDeliveryTime: '1–3 working days', outOfStockDeliveryTime: 'Usually available within 7–14 working days',
           additionalShippingCost: blueprint.weightKg >= 10 ? 9.99 : blueprint.weightKg >= 5 ? 4.99 : 0,
           isReturnable: true, returnableDays: 30, status: 'ACTIVE', isFeatured: sequence % 10 === 0, isTopProduct: sequence % 20 === 1,
           isIndexable: true, metaTitle, metaDescription, seoTags: [category.title.toLowerCase(), blueprint.noun.toLowerCase(), brand.title.toLowerCase(), configuration.toLowerCase(), 'uk delivery'],
